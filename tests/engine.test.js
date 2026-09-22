@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DEF } from "../src/config.js";
+import { DEF, OUTCOMES } from "../src/config.js";
 import { run, monte, irr, grid, YR } from "../src/engine.js";
 
 // Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for one deliberate
@@ -139,5 +139,24 @@ describe("exit-size grid", () => {
     const g = grid(DEF);
     expect(g.length).toBe(5);
     g.forEach(row => expect(row.length).toBe(6));
+  });
+});
+
+describe("outcome buckets", () => {
+  it("has no 'returns capital' bucket, and the remaining shares still sum to 100%", () => {
+    expect(OUTCOMES.some(([shK]) => shK === "sh1")).toBe(false);
+    const sum = OUTCOMES.reduce((a, [shK]) => a + DEF[shK], 0);
+    expect(sum).toBeCloseTo(1, 6);
+  });
+
+  it("maps each Monte Carlo bucket to the right multiple and exit year (regression guard for the SUCCESS-array refactor)", () => {
+    // Certainty scenarios: every non-failed position lands in exactly one bucket, so the
+    // random run should match the deterministic run almost exactly (no averaging noise).
+    for (const [shK, mulK, exK] of OUTCOMES.filter(([, mulK]) => mulK)) {
+      const p = { ...DEF, sh0: 0, sh2: 0, sh3: 0, sh4: 0, [shK]: 1 };
+      const det = run(p), mc = monte(p, 400);
+      expect(mc.K.mean).toBeCloseTo(det.K.TVPI, 6);
+      expect(mc.T.mean).toBeCloseTo(det.T.TVPI, 6);
+    }
   });
 });

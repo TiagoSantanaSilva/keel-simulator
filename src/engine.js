@@ -3,10 +3,16 @@
 // Mirrors Keel_Fund_Model.xlsx (Inputs + Fund Model tabs). See docs/model-spec.md.
 //
 // Years are 0-indexed and mean "years after the initial check" directly: index t
-// is the year in which an input like `foYear` or `ex1` fires. YR holds the
+// is the year in which an input like `foYear` or `ex2` fires. YR holds the
 // 1-based labels shown in the UI (YR[t] === t+1), matching the workbook's own
 // year numbering, where "year 1" is the year of the initial checks.
 export const YR = [1,2,3,4,5,6,7,8,9,10,11,12];
+
+// Outcome buckets with a multiple and an exit year (i.e. every bucket except failure).
+// Single source of truth so a bucket can be added or removed here without hunting down
+// every place it was previously spelled out (sh2*mul2+sh3*mul3+sh4*mul4, ...).
+const SUCCESS=[["sh2","mul2","ex2"],["sh3","mul3","ex3"],["sh4","mul4","ex4"]];
+const successMix=p=>SUCCESS.reduce((a,[sh,mul])=>a+p[sh]*p[mul],0);
 
 export function irr(cf){
   const npv=r=>{let f=1,s=0;for(let i=0;i<cf.length;i++){s+=cf[i]/f;f*=(1+r)}return s};
@@ -28,7 +34,7 @@ export function derive(p){
   // SAFE only
   d.NT=p.checkT>0?d.checkPool/p.checkT:0;
   d.failedT=d.NT*p.sh0;
-  d.successT=d.NT*p.checkT*(p.sh1*p.mul1+p.sh2*p.mul2+p.sh3*p.mul3+p.sh4*p.mul4);
+  d.successT=d.NT*p.checkT*successMix(p);
   d.grossT=d.successT+d.foReserve*p.foMult;
   d.writeOffT=d.failedT*p.checkT;
 
@@ -44,7 +50,7 @@ export function derive(p){
   d.recovered=d.redeemedK*p.optK*(1+p.yld*p.yldInv*p.dRed);
   d.recycled=d.recovered>0?Math.min(d.recovered*p.recShare,p.F*p.recCap):0;
   d.distFromRed=d.recovered-d.recycled;
-  d.successK=d.NK*d.checkK*(p.sh1*p.mul1+p.sh2*p.mul2+p.sh3*p.mul3+p.sh4*p.mul4);
+  d.successK=d.NK*d.checkK*successMix(p);
   d.grossK=d.successK/(1+p.premium)+d.foReserveK*p.foMult+d.distFromRed+d.recycled*p.recMult;
   d.writeOffK=d.failedK*p.safeK+(d.failedK-d.redeemedK)*p.optK+d.totalFees;
 
@@ -91,19 +97,13 @@ export function run(p){
     T.paid[t]=a+b;
 
     let e=0;
-    if(t===p.ex1) e+=d.NT*p.checkT*p.sh1*p.mul1;
-    if(t===p.ex2) e+=d.NT*p.checkT*p.sh2*p.mul2;
-    if(t===p.ex3) e+=d.NT*p.checkT*p.sh3*p.mul3;
-    if(t===p.ex4) e+=d.NT*p.checkT*p.sh4*p.mul4;
+    SUCCESS.forEach(([sh,mul,ex])=>{if(t===p[ex]) e+=d.NT*p.checkT*p[sh]*p[mul]});
     if(t===p.foExit) e+=d.foReserve*p.foMult;
     R(T,"Exits",t,e);
     T.dist[t]=e;
 
     let n=0;
-    if(t<p.ex1) n+=d.NT*p.checkT*p.sh1;
-    if(t<p.ex2) n+=d.NT*p.checkT*p.sh2;
-    if(t<p.ex3) n+=d.NT*p.checkT*p.sh3;
-    if(t<p.ex4) n+=d.NT*p.checkT*p.sh4;
+    SUCCESS.forEach(([sh,,ex])=>{if(t<p[ex]) n+=d.NT*p.checkT*p[sh]});
     if(t>=p.foYear&&t<p.foExit) n+=d.foReserve;
     T.nav[t]=n;
 
@@ -114,10 +114,7 @@ export function run(p){
     K.paid[t]=a+b+fee;
 
     e=0;
-    if(t===p.ex1) e+=d.NK*d.checkK*p.sh1*p.mul1/(1+p.premium);
-    if(t===p.ex2) e+=d.NK*d.checkK*p.sh2*p.mul2/(1+p.premium);
-    if(t===p.ex3) e+=d.NK*d.checkK*p.sh3*p.mul3/(1+p.premium);
-    if(t===p.ex4) e+=d.NK*d.checkK*p.sh4*p.mul4/(1+p.premium);
+    SUCCESS.forEach(([sh,mul,ex])=>{if(t===p[ex]) e+=d.NK*d.checkK*p[sh]*p[mul]/(1+p.premium)});
     if(t===p.dRed) e+=d.distFromRed;
     if(t===p.foExit) e+=d.foReserveK*p.foMult;
     if(t===p.recExit) e+=d.recycled*p.recMult;
@@ -126,10 +123,7 @@ export function run(p){
     K.dist[t]=e;
 
     n=0;
-    if(t<p.ex1) n+=d.NK*d.checkK*p.sh1;
-    if(t<p.ex2) n+=d.NK*d.checkK*p.sh2;
-    if(t<p.ex3) n+=d.NK*d.checkK*p.sh3;
-    if(t<p.ex4) n+=d.NK*d.checkK*p.sh4;
+    SUCCESS.forEach(([sh,,ex])=>{if(t<p[ex]) n+=d.NK*d.checkK*p[sh]});
     if(t<p.dRed) n+=d.redeemedK*p.optK;
     if(t>=p.foYear&&t<p.foExit) n+=d.foReserveK;
     if(t>=p.dRed&&t<p.recExit) n+=d.recycled;
@@ -163,8 +157,9 @@ export function monte(p,runs){
   const NT=Math.max(1,Math.round(d.NT)), NK=Math.max(1,Math.round(d.NK));
   const mg=t=>t<p.MFY?p.F*p.MF:0;
   const wf=x=>Math.min(x,p.F)+(1-p.carry)*Math.max(0,x-p.F);
-  const th=[p.sh0,p.sh0+p.sh1,p.sh0+p.sh1+p.sh2,p.sh0+p.sh1+p.sh2+p.sh3,1];
-  const draw=count=>{const c=[0,0,0,0,0];for(let i=0;i<count;i++){const u=rnd();let b=4;for(let k=0;k<5;k++){if(u<th[k]){b=k;break}}c[b]++}return c};
+  // Bucket 0 is failure; buckets 1..3 are SUCCESS[0..2] (solid, strong, outlier).
+  const th=[p.sh0,p.sh0+p.sh2,p.sh0+p.sh2+p.sh3,1];
+  const draw=count=>{const c=[0,0,0,0];for(let i=0;i<count;i++){const u=rnd();let b=3;for(let k=0;k<4;k++){if(u<th[k]){b=k;break}}c[b]++}return c};
 
   const paidT=[];for(let t=0;t<N;t++)paidT[t]=mg(t)+(t===0?d.checkPool:0)+(t===p.foYear?d.foReserve:0);
 
@@ -173,10 +168,7 @@ export function monte(p,runs){
     const cT=draw(NT), cK=draw(NK);
 
     const distT=new Array(N).fill(0);
-    if(p.ex1<N)distT[p.ex1]+=cT[1]*p.checkT*p.mul1;
-    if(p.ex2<N)distT[p.ex2]+=cT[2]*p.checkT*p.mul2;
-    if(p.ex3<N)distT[p.ex3]+=cT[3]*p.checkT*p.mul3;
-    if(p.ex4<N)distT[p.ex4]+=cT[4]*p.checkT*p.mul4;
+    SUCCESS.forEach(([,mul,ex],i)=>{if(p[ex]<N) distT[p[ex]]+=cT[i+1]*p.checkT*p[mul]});
     if(p.foExit<N)distT[p.foExit]+=d.foReserve*p.foMult;
     let cgd=0,lpcPrev=0;const netT=new Array(N);
     for(let t=0;t<N;t++){cgd+=distT[t];const lpc=wf(cgd);netT[t]=(lpc-lpcPrev)-paidT[t];lpcPrev=lpc}
@@ -196,10 +188,7 @@ export function monte(p,runs){
       const fee=(t>=1&&t<=p.dConv?convertedK*d.feePerPos:0)+(t>=1&&t<=p.dRed?redeemedK*d.feePerPos:0);
       paidK[t]=a+b+fee;
     }
-    if(p.ex1<N)distK[p.ex1]+=cK[1]*d.checkK*p.mul1/(1+p.premium);
-    if(p.ex2<N)distK[p.ex2]+=cK[2]*d.checkK*p.mul2/(1+p.premium);
-    if(p.ex3<N)distK[p.ex3]+=cK[3]*d.checkK*p.mul3/(1+p.premium);
-    if(p.ex4<N)distK[p.ex4]+=cK[4]*d.checkK*p.mul4/(1+p.premium);
+    SUCCESS.forEach(([,mul,ex],i)=>{if(p[ex]<N) distK[p[ex]]+=cK[i+1]*d.checkK*p[mul]/(1+p.premium)});
     if(p.dRed<N)distK[p.dRed]+=distFromRed;
     if(p.foExit<N)distK[p.foExit]+=foReserveK*p.foMult;
     if(p.recExit<N)distK[p.recExit]+=recycled*p.recMult;

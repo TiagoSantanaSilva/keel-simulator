@@ -10,7 +10,6 @@
 // that table; it is the source of truth for those fields, not the `f` array on group "out".
 export const OUTCOMES = [
   ["sh0", null, null, "Failure", "Returns nothing in the SAFE-only strategy."],
-  ["sh1", "mul1", "ex1", "Returns capital"],
   ["sh2", "mul2", "ex2", "Solid outcome"],
   ["sh3", "mul3", "ex3", "Strong outcome"],
   ["sh4", "mul4", "ex4", "Outlier"],
@@ -52,12 +51,12 @@ export const G = [
   ["recMult","Multiple on recycled capital (gross)",1,6,.25,"x"],
   ["recExit","Recycled capital exits (years after initial check)",1,11,1,"yr","Must be later than the redemption year."]]},
  {id:"pricing",section:"K",title:"Keel pricing",f:[
-  ["keelFee","Reserve fee paid by the fund (annual)",0,.05,.0025,"pct2","Charged on the protected (Option) balance, while it's protected."]]},
+  ["keelFee","Reserve fee paid by the fund (annual)",0,.05,.0025,"pct2","Charged on the Keel reserve balance, while it's deployed."]]},
 ];
 export const DEF = {F:50e6,MFY:10,MF:.02,carry:.2,checksPerMonth:8,
   checkT:500e3,safeK:0,optK:500e3,premium:0,roundVal:10e6,totalOpt:1e6,
   reserve:.2,foMult:3,foYear:2,foExit:7,
-  sh0:.7,sh1:0,mul1:1,ex1:5,sh2:.2,mul2:3,ex2:6,sh3:.08,mul3:10,ex3:7,sh4:.02,mul4:50,ex4:8,
+  sh0:.7,sh2:.2,mul2:3,ex2:6,sh3:.08,mul3:10,ex3:7,sh4:.02,mul4:50,ex4:8,
   redRate:.75,dConv:2,dRed:3,
   yld:.04,yldInv:0,
   recShare:.5,recCap:.15,recMult:3,recExit:8,

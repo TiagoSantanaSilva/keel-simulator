@@ -207,9 +207,11 @@ function renderFounder(){
   const p=S, keepConv=1-p.redRate, dil=v=>p.roundVal?v/p.roundVal:0;
   const cards=[
     ["Normal round (SAFE only)",[["Cash at close",p.checkT],["Total capital received",p.checkT],["Dilution at this round's valuation",dil(p.checkT),"pct"]]],
-    ["SAFE + Keel round, company succeeds",[["Cash at close",p.safeK],["Option converts after "+p.dConv+" years",p.optK],["Total capital received",p.safeK+p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["Yield received over "+p.dConv+" years",p.yld*p.optK*p.dConv*(1-p.yldInv)]]],
-    ["SAFE + Keel round, company fails",[["Cash at close",p.safeK],["Redeemed by investors after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["Total capital received",p.safeK+p.optK*keepConv],["Yield received over "+p.dRed+" years",p.yld*p.optK*p.dRed*(1-p.yldInv)]]],
-    ["Across the whole round",[["Round valuation (post-money)",p.roundVal],["Total Option amount in the round",p.totalOpt],["This fund's share of the Option pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of protected investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"]]]];
+    ["SAFE + Keel round, company succeeds",[["Cash at close",p.safeK],["Option converts after "+p.dConv+" years",p.optK],["Total capital received",p.safeK+p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution over "+p.dConv+" years",p.yld*p.optK*p.dConv*(1-p.yldInv)]]],
+    ["SAFE + Keel round, company fails",[["Cash at close",p.safeK],["Redeemed by investors after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["Total capital received",p.safeK+p.optK*keepConv],["This fund's yield contribution over "+p.dRed+" years",p.yld*p.optK*p.dRed*(1-p.yldInv)]]],
+    ["Across the whole round",[["Round valuation (post-money)",p.roundVal],["Total Option amount in the round",p.totalOpt],["This fund's share of the Option pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of protected investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],
+      ["Total yield to the company if it succeeds (over "+p.dConv+" years)",p.yld*p.totalOpt*p.dConv*(1-p.yldInv)],
+      ["Total yield to the company if it fails (over "+p.dRed+" years)",p.yld*p.totalOpt*p.dRed*(1-p.yldInv)]]]];
   $("founder").innerHTML=cards.map(([t,rows])=>`<div class="founder"><h3 style="margin:0 0 10px;font-size:15px">${t}</h3><dl>${rows.map(([a,v,f])=>`<dt>${a}</dt><dd>${f==="pct"?fmt.pct1(v):f==="n"?v.toFixed(1):fmt.usdFull(v)}</dd>`).join("")}</dl></div>`).join("");
 }
 function cfRows(o){
@@ -226,7 +228,7 @@ function renderCF(r){
     rows.map(([l,v,f,em])=>`<tr class="${em?'em':''}"><td>${l}</td>${v.map(x=>`<td>${f==="x"?x.toFixed(2)+"x":(Math.abs(x)<0.5?"-":fmt.usdFull(x))}</td>`).join("")}</tr>`).join("")+"</tbody>";
 }
 function warnings(){
-  const w=[]; const shareSum=S.sh0+S.sh1+S.sh2+S.sh3+S.sh4;
+  const w=[]; const shareSum=OUTCOMES.reduce((a,[shK])=>a+S[shK],0);
   if(Math.abs(shareSum-1)>0.001) w.push(`Outcome shares sum to ${(shareSum*100).toFixed(0)}%, not 100%.`);
   if(S.foExit<=S.foYear) w.push("Follow-ons must exit after they're deployed.");
   if(S.recExit<=S.dRed) w.push("Recycled capital must exit after the redemption year.");
