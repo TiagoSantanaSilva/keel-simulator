@@ -81,7 +81,16 @@ export function metrics(p,paid,dist,nav){
   }
   o.irr=irr(o.net);
   o.TVPI=o.tvpi[N-1];
-  o.irrToDate=[]; for(let i=0;i<N;i++) o.irrToDate[i]=irr(o.net.slice(0,i+1));
+  // IRR to date: cash flows through year i, with that year's unrealised LP NAV
+  // (lptv[i]-lpc[i]) added as an extra inflow, as if the position were marked and
+  // liquidated at cost that year. At the final year NAV is 0 (everything has exited),
+  // so this converges exactly to o.irr without needing to special-case the last point.
+  o.irrToDate=[];
+  for(let i=0;i<N;i++){
+    const cf=o.net.slice(0,i+1);
+    cf[i]+=o.lptv[i]-o.lpc[i];
+    o.irrToDate[i]=irr(cf);
+  }
   return o;
 }
 
@@ -121,7 +130,7 @@ export function run(p){
     if(t===p.foExit) e+=d.foReserveK*p.foMult;
     if(t===p.recExit) e+=d.recycled*p.recMult;
     R(K,"Exits and redemptions",t,e);
-    R(K,"Recycled into winners' next Series A",t,t===p.recExit?d.recycled*p.recMult:0);
+    R(K,"Recycled into winners' next round",t,t===p.recExit?d.recycled*p.recMult:0);
     K.dist[t]=e;
 
     n=0;

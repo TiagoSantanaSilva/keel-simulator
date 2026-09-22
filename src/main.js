@@ -89,7 +89,7 @@ let chartKey="tvpi", heatKey="best", cfKey="K", last=null, lastMC=null, lastGrid
 function renderHull(r){
   const vals=[r.T.TVPI,r.K.TVPI], max=Math.max(1.5,...vals)*1.12;
   const pos=v=>Math.max(0,Math.min(100,v/max*100));
-  const sub={T:fmt.usd(S.checkT)+" check",K:fmt.usd(S.safeK)+" SAFE + "+fmt.usd(S.optK)+" Option"};
+  const sub={T:fmt.usd(S.checkT)+" check",K:fmt.usd(S.safeK)+" SAFE + "+fmt.usd(S.optK)+" convertible"};
   let h=`<h2 class="hulltitle">Net TVPI</h2>`;
   ["T","K"].forEach(k=>{const v=r[k].TVPI;
     h+=`<div class="row"><div class="name">${NAME[k]}<small>${sub[k]}</small></div>
@@ -97,7 +97,6 @@ function renderHull(r){
       <div class="val" style="color:${COL[k]}">${v.toFixed(2)}x</div></div>`});
   const ticks=[0,.5,1,1.5,2,3,4,5,6,8,10].filter(v=>v<=max);
   h+=`<div class="scale"><div></div><div class="ticks">${ticks.map(v=>`<span style="left:${pos(v)}%">${v===1?'<span class="wl-label">1.0x</span>':v+"x"}</span>`).join("")}</div><div></div></div>`;
-  h+=`<div class="hulldef">Net TVPI: for every $1 an LP put in, what they'd have back today — cash already distributed plus the value of what's still held — after Keel fees, management fees and carry. 1.0x is the dashed line: below it, LPs haven't got their money back yet.</div>`;
   $("hull").innerHTML=h;
   $("headline").textContent=`What a ${fmt.usd(r.p.F)} seed fund returns to its LPs`;
 }
@@ -112,7 +111,7 @@ function renderStats(r){
     ["Seed positions backed","Expected number of companies funded from the initial check pool.",(o,k)=>k==="T"?r.d.NT:r.d.NK,v=>v.toFixed(1)],
   ];
   let h=s.map(([t,def,fn,f])=>`<div class="stat"><h3>${t}</h3><div class="kpidef">${def}</div>${trio(r,fn,f)}</div>`).join("");
-  h+=`<div class="stat"><h3>Keel: recovered from failures</h3><div class="kpidef">Redeemed protected capital, split between recycling and an LP distribution.</div><div style="font-size:18px;font-weight:700" class="k">${fmt.usd(r.recoveredK)}</div><div class="hint" style="font-size:12px;color:var(--muted)">${fmt.usd(r.recycledK)} recycled into winners' next Series A, ${fmt.usd(r.distFromRedK)} distributed to LPs, ${fmt.usd(r.feesK)} in Keel fees</div></div>`;
+  h+=`<div class="stat"><h3>Keel: recovered from failures</h3><div class="kpidef">Redeemed protected capital, split between recycling and an LP distribution.</div><div style="font-size:18px;font-weight:700" class="k">${fmt.usd(r.recoveredK)}</div><div class="hint" style="font-size:12px;color:var(--muted)">${fmt.usd(r.recycledK)} recycled into winners' next round, ${fmt.usd(r.distFromRedK)} distributed to LPs, ${fmt.usd(r.feesK)} in Keel fees</div></div>`;
   $("stats").innerHTML=h;
 }
 function tabs(host,items,cur,onPick){
@@ -154,18 +153,21 @@ function renderChart(r){
   lineChart("chart",["T","K"].map(k=>({n:NAME[k],c:COL[k],v:r[k][chartKey]})),yfmt,money||pctv?0:1);
 }
 function renderHist(mc){
-  const W=760,H=240,m={l:40,r:14,t:10,b:30};
+  const W=760,H=240,m={l:48,r:14,t:10,b:30};
   const all=[...mc.T.arr,...mc.K.arr], lo=0, hi=Math.max(2,Math.min(8,[...all].sort((a,b)=>a-b)[Math.floor(all.length*.99)]*1.05));
   const bins=40, bw=(hi-lo)/bins;
   const hist=a=>{const h=new Array(bins).fill(0);a.forEach(v=>{const i=Math.min(bins-1,Math.max(0,Math.floor((v-lo)/bw)));h[i]++});return h.map(c=>c/a.length)};
-  const H2={T:hist(mc.T.arr),K:hist(mc.K.arr)}, ymax=Math.max(...H2.T,...H2.K)*1.1;
+  const H2={T:hist(mc.T.arr),K:hist(mc.K.arr)}, ymaxRaw=Math.max(...H2.T,...H2.K)*1.1;
+  const mag=Math.pow(10,Math.floor(Math.log10(ymaxRaw))), ystep=[1,2,2.5,5,10].map(f=>f*mag).find(s=>s>=ymaxRaw/4)||mag;
+  const ymax=Math.ceil(ymaxRaw/ystep)*ystep;
   const x=v=>m.l+(v-lo)*(W-m.l-m.r)/(hi-lo), y=v=>m.t+(ymax-v)*(H-m.t-m.b)/ymax;
-  let g=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line)"/>`;
+  let g="";
+  for(let v=0;v<=ymax+1e-9;v+=ystep) g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${(v*100).toFixed(0)}%</text>`;
   for(let v=0;v<=hi+1e-9;v+=hi>4?1:.5) g+=`<text x="${x(v)}" y="${H-10}" text-anchor="middle">${v}x</text>`;
   g+=`<line x1="${x(1)}" x2="${x(1)}" y1="${m.t}" y2="${y(0)}" stroke="var(--water)" stroke-dasharray="5 4" stroke-width="1.5"/><text x="${x(1)+6}" y="${m.t+12}" style="fill:var(--water)">money back</text>`;
   ["T","K"].forEach(k=>{let d=`M${x(lo)},${y(0)}`;H2[k].forEach((c,i)=>{d+=` L${x(lo+i*bw)},${y(c)} L${x(lo+(i+1)*bw)},${y(c)}`});d+=` L${x(hi)},${y(0)}`;
     g+=`<path d="${d}" fill="${COL[k]}" fill-opacity="${k==='K'?.22:.1}" stroke="${COL[k]}" stroke-width="2"/>`});
-  $("hist").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Distribution of net TVPI across simulated funds">${g}</svg>`;
+  $("hist").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Distribution of net TVPI across simulated funds, share of funds on the vertical axis">${g}</svg>`;
   $("mcstats").innerHTML=["T","K"].map(k=>{const s=mc[k];return `<div class="mc"><h3 class="${k.toLowerCase()}">${NAME[k]}</h3><dl>
     <dt>Chance LPs lose money</dt><dd>${(s.loss*100).toFixed(1)}%</dd><dt>Worst 10% of funds</dt><dd>${s.p10.toFixed(2)}x</dd>
     <dt>Median fund</dt><dd>${s.p50.toFixed(2)}x</dd><dt>Best 10% of funds</dt><dd>${s.p90.toFixed(2)}x</dd><dt>Average</dt><dd>${s.mean.toFixed(2)}x</dd>
@@ -185,14 +187,22 @@ function renderHeat(g){
 }
 function renderFounder(){
   const p=S, keepConv=1-p.redRate, dil=v=>p.roundVal?v/p.roundVal:0;
+  const fmtVal=(v,f)=>f==="pct"?fmt.pct1(v):f==="n"?v.toFixed(1):fmt.usdFull(v);
+  // Each row is [label, value, format?, hero?]. The hero row gets a large, coloured
+  // headline treatment; everything else sits in a compact two-column grid below it.
   const cards=[
-    ["Normal round (SAFE only)",[["Cash at close",p.checkT],["Total capital received",p.checkT],["Dilution at this round's valuation",dil(p.checkT),"pct"]]],
-    ["SAFE + Keel round, company succeeds",[["Cash at close",p.safeK],["Option converts after "+p.dConv+" years",p.optK],["Total capital received",p.safeK+p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution over "+p.dConv+" years",p.yld*p.optK*p.dConv]]],
-    ["SAFE + Keel round, company fails",[["Cash at close",p.safeK],["Redeemed by investors after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["Total capital received",p.safeK+p.optK*keepConv],["This fund's yield contribution over "+p.dRed+" years",p.yld*p.optK*p.dRed]]],
-    ["Across the whole round",[["Round valuation (post-money)",p.roundVal],["Total Option amount in the round",p.totalOpt],["This fund's share of the Option pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of protected investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],
-      ["Total yield to the company if it succeeds (over "+p.dConv+" years)",p.yld*p.totalOpt*p.dConv],
-      ["Total yield to the company if it fails (over "+p.dRed+" years)",p.yld*p.totalOpt*p.dRed]]]];
-  $("founder").innerHTML=cards.map(([t,rows])=>`<div class="founder"><h3 style="margin:0 0 10px;font-size:15px">${t}</h3><dl>${rows.map(([a,v,f])=>`<dt>${a}</dt><dd>${f==="pct"?fmt.pct1(v):f==="n"?v.toFixed(1):fmt.usdFull(v)}</dd>`).join("")}</dl></div>`).join("");
+    ["Normal round",["SAFE only",[["Cash at close",p.checkT],["Dilution at this round's valuation",dil(p.checkT),"pct"],["Total capital received",p.checkT,null,true]]]],
+    ["If the company succeeds",["SAFE + Keel",[["Cash at close",p.safeK],["Converts after "+p.dConv+" years",p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution, "+p.dConv+"y",p.yld*p.optK*p.dConv],["Total capital received",p.safeK+p.optK,null,true]]]],
+    ["If the company fails",["SAFE + Keel",[["Cash at close",p.safeK],["Redeemed after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["This fund's yield contribution, "+p.dRed+"y",p.yld*p.optK*p.dRed],["Total capital received",p.safeK+p.optK*keepConv,null,true]]]],
+    ["Across the whole round",["All protected investors",[["Round valuation (post-money)",p.roundVal],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],["Total yield if it succeeds, "+p.dConv+"y",p.yld*p.totalOpt*p.dConv],["Total yield if it fails, "+p.dRed+"y",p.yld*p.totalOpt*p.dRed],["Total convertible amount in the round",p.totalOpt,null,true]]]]];
+  $("founder").innerHTML=cards.map(([t,[badge,rows]])=>{
+    const hero=rows.find(r=>r[3]), rest=rows.filter(r=>!r[3]);
+    return `<div class="founder">
+      <div class="founderhd"><h3>${t}</h3><span class="fbadge">${badge}</span></div>
+      ${hero?`<div class="fhero"><div class="fherolabel">${hero[0]}</div><div class="fheroval">${fmtVal(hero[1],hero[2])}</div></div>`:""}
+      <div class="ftiles">${rest.map(([a,v,f])=>`<div class="ftile"><div class="flabel">${a}</div><div class="fval">${fmtVal(v,f)}</div></div>`).join("")}</div>
+    </div>`;
+  }).join("");
 }
 function cfRows(o){
   const rows=[];Object.entries(o.rows).forEach(([k,v])=>rows.push([k,v,"usd"]));
@@ -237,7 +247,7 @@ function buildWorkbook(){
     ["DPI at year 4",r.T.dpi[3],r.K.dpi[3]],["RVPI at year 4",r.T.rvpi[3],r.K.rvpi[3]],
     ["DPI at year 6",r.T.dpi[5],r.K.dpi[5]],["RVPI at year 6",r.T.rvpi[5],r.K.rvpi[5]],
     ["Capital lost in failures",r.writeOffT,r.writeOffK],["Seed positions backed",r.d.NT,r.d.NK],
-    [],["KEEL DETAIL","",""],["Recovered from failures","",r.recoveredK],["Recycled into winners' next Series A","",r.recycledK],
+    [],["KEEL DETAIL","",""],["Recovered from failures","",r.recoveredK],["Recycled into winners' next round","",r.recycledK],
     ["Distributed to LPs from redemptions","",r.distFromRedK],["Total Keel fees","",r.feesK],["Keel fees as % of fund","",r.feesPctK]];
   if(mc){ results.push([],[`SIMULATION (${mc.runs} funds, net TVPI)`,"SAFE only","SAFE + Keel"]);
     [["Chance LPs lose money","loss"],["Worst 10%","p10"],["Median","p50"],["Best 10%","p90"],["Average","mean"],["Average net IRR","irrMean"]]

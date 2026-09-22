@@ -33,10 +33,10 @@ export const G = [
 
  {id:"checks",section:"K",title:"Initial checks",open:true,f:[
   ["safeK","SAFE amount",0,3e6,25e3,"usd"],
-  ["optK","Option amount",0,3e6,25e3,"usd","The protected part. Redeemable if the company fails, converts if it succeeds."],
-  ["premium","Valuation premium on Option rounds",0,.4,.01,"pct","0% = same price as a normal round."],
+  ["optK","Convertible amount",0,3e6,25e3,"usd","The protected part. Redeemable if the company fails, converts if it succeeds."],
+  ["premium","Valuation premium on convertible rounds",0,.4,.01,"pct","0% = same price as a normal round."],
   ["roundVal","Round valuation (post-money)",1e6,100e6,500e3,"usd"],
-  ["totalOpt","Total Option amount in the round",0,10e6,50e3,"usd","Across every protected investor, not just this fund. For the founder view."]]},
+  ["totalOpt","Total convertible amount in the round",0,10e6,50e3,"usd","Across every protected investor, not just this fund. For the founder view."]]},
  {id:"dec",section:"K",title:"Keel decisions",open:true,f:[
   ["redRate","Redemption rate (failures redeemed before converting)",0,1,.05,"pct"],
   ["dConv","Years protected before converting (winners)",0,3,1,"n"],
@@ -44,10 +44,10 @@ export const G = [
  {id:"yld",section:"K",title:"Reserve yield",f:[
   ["yld","Reserve yield (annual)",0,.12,.005,"pct"]]},
  {id:"rec",section:"K",title:"Recycling",f:[
-  ["recShare","Share of recovered capital recycled into follow-ons",0,1,.05,"pct","Into winners' next Series A. The rest is distributed to LPs."],
-  ["recCap","Recycling cap (% of fund size)",0,.4,.01,"pct","The most that can be recycled into follow-ons, as a share of the whole fund — even if more is recovered from failures, anything above the cap goes straight to LPs instead."],
+  ["recShare","Share of recovered capital recycled into follow-ons",0,1,.05,"pct","Into winners' next round. The rest is distributed to LPs."],
+  ["recCap","Recycling cap (% of fund size)",0,.4,.01,"pct"],
   ["recMult","Multiple on recycled capital (gross)",1,6,.25,"x"],
-  ["recExit","Recycled capital exits (years after initial check)",1,11,1,"yr","Must be later than the redemption year."]]},
+  ["recExit","Recycled capital exits (years after initial check)",1,11,1,"yr"]]},
  {id:"pricing",section:"K",title:"Keel pricing",f:[
   ["keelFee","Reserve fee paid by the fund (annual)",0,.05,.0025,"pct2","Charged on the Keel reserve balance, while it's deployed."]]},
 ];

@@ -8,10 +8,10 @@ Two strategies are compared, both funded from the same fund and the same outcome
 
 - **SAFE only:** every position is a single unprotected SAFE (`checkT`), independent of the
   SAFE + Keel check size below.
-- **SAFE + Keel:** every position splits into an unprotected SAFE (`safeK`) plus a Keel Option
-  (`optK`). The Option redeems if the company fails (subject to the redemption rate) and
+- **SAFE + Keel:** every position splits into an unprotected SAFE (`safeK`) plus a Keel
+  convertible (`optK`). It redeems if the company fails (subject to the redemption rate) and
   converts, at a possible valuation premium, if it succeeds. `roundVal` (round valuation) and
-  `totalOpt` (total Option amount across every protected investor in the round) are
+  `totalOpt` (total convertible amount across every protected investor in the round) are
   informational only — shown in the founder view, and don't feed into either strategy's
   returns, since the model has no cap-table/dilution mechanics.
 
@@ -42,10 +42,10 @@ and when each one individually exits, which this expected-value model doesn't do
 - **Year `foYear`+1:** the follow-on reserve is deployed (net of Keel fees, for SAFE + Keel).
   This reserve is sized identically for both strategies (see Strategies below) — it's the
   most common source of "why did the SAFE-only number move?" confusion.
-- **Years `ex1`+1 to `ex4`+1:** each outcome bucket (returns capital, solid, strong, outlier)
-  exits in its own year and pays out its multiple on the whole check.
+- **Years `ex2`+1 to `ex4`+1:** each outcome bucket (solid, strong, outlier) exits in its own
+  year and pays out its multiple on the whole check.
 - **Year `foExit`+1:** the follow-on reserve exits at `foMult`.
-- **Year `recExit`+1:** capital recycled from redemptions into winners' next Series A exits at
+- **Year `recExit`+1:** capital recycled from redemptions into winners' next round exits at
   `recMult`.
 
 ## Derived values (`derive`)
@@ -60,7 +60,7 @@ and when each one individually exits, which this expected-value model doesn't do
 | feePerPos | Keel's annual fee per position | `keelFee` × `optK` (a single flat annual rate on the protected balance) |
 | totalFees | Total Keel fees | convertedK × feePerPos × dConv + redeemedK × feePerPos × dRed |
 | recovered | Capital recovered via redemption | redeemedK × optK (100% of reserve yield goes to the company, so no yield boost on the fund's recovery) |
-| recycled | Recycled into winners' next Series A | min(recovered × recShare, F × recCap) |
+| recycled | Recycled into winners' next round | min(recovered × recShare, F × recCap) |
 
 `convertedK` is every position that is *not* redeemed (successes plus unredeemed failures) —
 it keeps accruing the Keel fee until the conversion decision at year `dConv`.
@@ -72,7 +72,7 @@ it keeps accruing the Keel fee until the conversion decision at year `dConv`.
 - **SAFE + Keel:** NK checks split `safeK` / `optK`. A failure loses `safeK` outright; the
   `optK` share is redeemed (`redRate`) or lost. A success converts the *whole* check
   (`safeK` + `optK`) at the round's terms, discounted by `premium`. Capital recovered from
-  redemptions is split between recycling into winners' next Series A (up to `recCap` of the
+  redemptions is split between recycling into winners' next round (up to `recCap` of the
   fund) and a direct distribution to LPs. Keel fees come out of the follow-on reserve before
   it's deployed.
 
@@ -83,7 +83,7 @@ fair"), and it's why moving the `reserve` slider visibly changes the SAFE-only s
 "Same" describes only this base pool, though — it's `foReserve` for SAFE only vs.
 `foReserveK = foReserve − totalFees` for SAFE + Keel (fees come out first). Recycled capital
 is a second, separate pool that only SAFE + Keel has: on top of its (fee-reduced) share of the
-base reserve, SAFE + Keel *also* deploys `recycled` into winners at their next Series A. So
+base reserve, SAFE + Keel *also* deploys `recycled` into winners at their next round. So
 Keel strategy's total capital reaching winners is the base reserve's pro-rata share minus fees,
 plus this additional recycled amount — strictly more machinery than SAFE only has, even though
 the base pool itself is sized identically.
@@ -118,9 +118,12 @@ purely from the cash-flow rows below, matching the workbook exactly.
 - **TVPI** = DPI + RVPI, net of carry. Equals DPI once every position has exited.
 - **Gross multiple** = total proceeds (before fees and carry) / fund size.
 - **Net IRR** on yearly LP cash flows (contributions negative, distributions positive); the
-  solver returns the root closest to zero. **IRR to date** (`irrToDate[i]`) is the same solve
-  restricted to years 0..i — it's `NaN` for any year before the first LP distribution, since
-  there's no sign change yet to find a root from.
+  solver returns the root closest to zero. **IRR to date** (`irrToDate[i]`) restricts the cash
+  flows to years 0..i, but adds that year's unrealised LP NAV (`lptv[i] − lpc[i]`) as an extra
+  inflow in year i — as if the position were marked to cost and liquidated then. It's `NaN`
+  only when that adjusted series has no sign change to find a root from (typically just the
+  very first year or two, before any capital has moved). At the final year NAV is 0, so
+  `irrToDate` converges exactly to `irr` without a special case.
 - **Waterfall:** European, no hurdle. LPs receive all commitments first, then (1 − carry) of
   the rest.
 

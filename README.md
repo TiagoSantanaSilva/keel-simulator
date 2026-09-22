@@ -3,9 +3,9 @@
 An interactive simulator for emerging seed-fund GPs, mirroring `Keel_Fund_Model.xlsx`. It compares two ways to deploy the same fund into the same companies:
 
 - **SAFE only:** writes the full check as a single unprotected SAFE.
-- **SAFE + Option:** splits the check into an unprotected SAFE plus a Keel Option, which converts in winners and redeems in failures. The SAFE and Option amounts are set independently of the SAFE-only check size.
+- **SAFE + Keel:** splits the check into an unprotected SAFE plus a Keel convertible, which converts in winners and redeems in failures. The SAFE and convertible amounts are set independently of the SAFE-only check size.
 
-Every assumption is a slider. The page shows net TVPI, net IRR, gross multiple, DPI and RVPI by year, a 2,000-fund Monte Carlo (with its own IRR distribution), an exit-size grid showing which strategy wins, a founder view, full cash-flow tables, and an XLSX export of everything.
+Every assumption is a slider (or, for outcomes, a table). The page shows net TVPI, net IRR (including an IRR-to-date series), gross multiple, DPI and RVPI by year, a 2,000-fund Monte Carlo, a premium-vs-redemption-rate grid showing which strategy wins, a founder view, full cash-flow tables, and an XLSX export of everything.
 
 ## Run it
 
@@ -21,7 +21,7 @@ npm run build    # static site in dist/
 | Path | What it holds |
 |---|---|
 | `src/engine.js` | The model. Pure functions, no DOM: `derive`, `run`, `metrics`, `irr`, `monte`, `grid`. |
-| `src/config.js` | Input schema (sliders), defaults and presets. |
+| `src/config.js` | Input schema (sliders and the outcomes table) and defaults. |
 | `src/format.js` | Number formatting. |
 | `src/main.js` | UI: controls, charts, tables, export. |
 | `src/styles.css` | Styles, light and dark themes. |

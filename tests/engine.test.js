@@ -63,16 +63,26 @@ describe("deterministic engine, default inputs", () => {
     expect(YR).toEqual([1,2,3,4,5,6,7,8,9,10,11,12]);
   });
 
-  it("computes an IRR-to-date for every year, converging to the final IRR", () => {
+  it("computes an IRR-to-date for every year, and the last point matches the final net IRR", () => {
     for (const k of ["T", "K"]) {
       expect(r[k].irrToDate.length).toBe(12);
       expect(r[k].irrToDate.at(-1)).toBeCloseTo(r[k].irr, 6);
     }
   });
+
+  it("IRR-to-date marks unrealised NAV as an inflow, so it isn't NaN as soon as distributions start", () => {
+    // The plain net-cash-flow IRR (no NAV) would still be NaN for several years after the
+    // first distribution, since paid-in usually still exceeds distributions alone. Marking
+    // the remaining NAV to cost gives a usable estimate much earlier.
+    const k = r.K;
+    const firstPositiveDistYear = k.lpd.findIndex(v => v > 0);
+    expect(firstPositiveDistYear).toBeGreaterThan(-1);
+    expect(Number.isNaN(k.irrToDate[firstPositiveDistYear])).toBe(false);
+  });
 });
 
 describe("informational-only inputs", () => {
-  it("round valuation and total Option amount don't affect returns", () => {
+  it("round valuation and total convertible amount don't affect returns", () => {
     const base = run(DEF);
     const r = run({ ...DEF, roundVal: 25e6, totalOpt: 5e6 });
     expect(r.T.TVPI).toBeCloseTo(base.T.TVPI, 9);
