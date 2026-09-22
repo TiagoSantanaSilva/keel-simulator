@@ -25,23 +25,32 @@ import { run, monte, irr, YR } from "../src/engine.js";
 //    fires correctly at year `dConv`/`dRed`+1 elsewhere in the model. Fixed to `t<dConv`/
 //    `t<dRed`. Total fee dollars are unchanged (still `dConv`/`dRed` years' worth); paying
 //    them a year earlier costs LPs a bit more time value, so K.irr drops very slightly.
+// 5. Follow-on/recycled capital now earns `outcome multiple / foStepUp` (default foStepUp=3),
+//    not the outcome's raw multiple -- a follow-on dollar buys in at a higher price than the
+//    initial check, so it only captures a fraction of the same exit. It's also no longer
+//    split strictly evenly across survivors: `foSkill` (default 0, i.e. unchanged from before)
+//    blends that even split with a "perfect hindsight" allocation weighted toward the eventual
+//    winners. Together these roughly offset item 3's TVPI/IRR jump -- the default foStepUp=3
+//    divides the effective follow-on multiple back down, so these numbers are substantially
+//    lower than the ones item 3 introduced, though still higher than pre-item-3 since a slice
+//    of every follow-on dollar still rides the outlier multiple, just at 1/3 the payoff.
 // If a change moves these numbers on purpose, update them here and say why in the commit.
 describe("deterministic engine, default inputs", () => {
   const r = run(DEF);
 
   it("matches the expected net TVPI", () => {
-    expect(r.T.TVPI).toBeCloseTo(2.4528, 3);
-    expect(r.K.TVPI).toBeCloseTo(3.40384, 3);
+    expect(r.T.TVPI).toBeCloseTo(1.7701333333, 3);
+    expect(r.K.TVPI).toBeCloseTo(2.1767466667, 3);
   });
 
   it("matches the expected net IRR", () => {
-    expect(r.T.irr).toBeCloseTo(0.1580622813, 3);
-    expect(r.K.irr).toBeCloseTo(0.2293210558, 3);
+    expect(r.T.irr).toBeCloseTo(0.0991367629, 3);
+    expect(r.K.irr).toBeCloseTo(0.1450852971, 3);
   });
 
   it("matches the expected gross multiple", () => {
-    expect(r.grossMultipleT).toBeCloseTo(2.816, 2);
-    expect(r.grossMultipleK).toBeCloseTo(4.0048, 2);
+    expect(r.grossMultipleT).toBeCloseTo(1.9627, 2);
+    expect(r.grossMultipleK).toBeCloseTo(2.4709, 2);
   });
 
   it("matches the expected DPI at year 4 and year 6", () => {
@@ -129,6 +138,25 @@ describe("model invariants", () => {
   it("Keel fees never push the fund's total paid-in above what the fee formula implies", () => {
     const r = run(DEF);
     expect(r.feesK).toBeCloseTo(r.d.totalFees, -1);
+  });
+
+  it("a follow-on dollar returns less than a seed dollar in the same company, at any step-up above 1", () => {
+    // Isolate a single outcome bucket (no failures, no other buckets) so both the initial
+    // check and the follow-on tranche are riding the exact same company's exit -- the only
+    // difference is the entry price. Per dollar deployed, the seed check earns the bucket's
+    // raw multiple; the follow-on tranche earns multiple/foStepUp.
+    const p = { ...DEF, sh0: 0, outcomes: [{ label: "Only", share: 1, mult: 5, exit: 6 }], foStepUp: 3 };
+    const r = run(p);
+    const seedReturnPerDollar = r.d.successT / (r.d.NT * p.checkT);
+    const followOnReturnPerDollar = r.d.followOnValueT / r.d.foReserve;
+    expect(followOnReturnPerDollar).toBeLessThan(seedReturnPerDollar);
+  });
+
+  it("net TVPI falls as the follow-on step-up rises", () => {
+    const low = run({ ...DEF, foStepUp: 1.5 });
+    const high = run({ ...DEF, foStepUp: 6 });
+    expect(high.T.TVPI).toBeLessThan(low.T.TVPI);
+    expect(high.K.TVPI).toBeLessThan(low.K.TVPI);
   });
 });
 

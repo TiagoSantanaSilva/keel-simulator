@@ -31,15 +31,20 @@ resolution (every formula here is keyed off a single check date) — a possible 
 not attempted as a partial fix.
 
 **Follow-ons and recycled capital are attributed per surviving company, riding that company's
-own outcome.** The reserve (and, for SAFE + Keel, recycled capital) is split evenly across every
-surviving company, in proportion to each outcome bucket's share (`foPerShareT`/`foPerShareK` =
-reserve ÷ total surviving share). Each bucket's follow-on tranche then earns *that bucket's own*
-`mult` and pays out in *that bucket's own* `exit` year — there's no separate follow-on multiple
-or exit-year input; the money simply rides along with whichever company it went into, using the
-Outcomes table that's already there. This replaced an earlier design with a single blended
-`foMult`/`foExit` (and, before that, a separate `recMult`/`recExit`) applied to the whole pool —
-there was no basis for follow-on or recycled dollars to earn a flat return disconnected from
-which company they actually followed on into.
+own outcome — at a discount for entering later.** The reserve (and, for SAFE + Keel, recycled
+capital) is split across every surviving company by `allocate()`, which blends two allocation
+styles via `foSkill` (0–1): an *even* split, where each bucket's slice is proportional to its
+share of survivors (`foSkill = 0`, the old default behaviour), and a *hindsight* split, where
+each bucket's slice is proportional to its share of eventual portfolio value (`share × mult`,
+`foSkill = 1`) — as if the fund could already tell which companies would be the big winners and
+concentrated its follow-on dollars there. Each bucket's follow-on tranche then earns *that
+bucket's own* `mult`, divided by `foStepUp` (default 3x), and pays out in *that bucket's own*
+`exit` year. The division models a real dynamic the flat-multiple design couldn't: a follow-on
+dollar buys in at a higher price than the initial check (the step-up), so it only captures a
+fraction of the same exit. There's no separate follow-on exit-year input — the money simply
+rides along with whichever company it went into, using the Outcomes table that's already there.
+This replaced an earlier design with a single blended `foMult`/`foExit` (and, before that, a
+separate `recMult`/`recExit`) applied to the whole pool with no per-company attribution at all.
 
 - **Year 1:** initial checks. Management fees are charged for `MFY` years starting here.
 - **Years 1 to `dConv`:** Keel charges its annual fee on positions still protected and
@@ -51,10 +56,8 @@ which company they actually followed on into.
 - **Year `foYear`+1:** the follow-on reserve is deployed (net of Keel fees, for SAFE + Keel).
   This reserve is sized identically for both strategies (see Strategies below) — it's the
   most common source of "why did the SAFE-only number move?" confusion.
-- Each outcome bucket exits, at its own `exit`+1 year, paying out its multiple on the whole
-  check.
-- **Year `foExit`+1:** the follow-on reserve *and* any recycled capital exit together, both
-  at `foMult`.
+- Each outcome bucket exits, at its own `exit`+1 year, paying out its multiple on the initial
+  check plus `mult ÷ foStepUp` on whatever follow-on/recycled dollars were allocated to it.
 
 ## Derived values (`derive`)
 
@@ -69,14 +72,15 @@ which company they actually followed on into.
 | totalFees | Total Keel fees | convertedK × feePerPos × dConv + redeemedK × feePerPos × dRed |
 | recovered | Capital recovered via redemption | redeemedK × optK (100% of reserve yield goes to the company, so no yield boost on the fund's recovery) |
 | recycled | Recycled into winners' next round | recovered × recShare (uncapped) |
+| foAllocT/K[i], recAllocK[i] | Dollars of the reserve/recycled pool allocated to outcome bucket i | `allocate()` — see the Timeline section above |
 
 `convertedK` is every position that is *not* redeemed (successes plus unredeemed failures) —
 it keeps accruing the Keel fee until the conversion decision at year `dConv`.
 
 ## Strategies
 
-- **SAFE only:** NT checks of `checkT`. Failures return nothing. The follow-on reserve exits
-  at `foMult`.
+- **SAFE only:** NT checks of `checkT`. Failures return nothing. The follow-on reserve is
+  allocated per bucket and exits at each bucket's own `mult ÷ foStepUp`.
 - **SAFE + Keel:** NK checks split `safeK` / `optK`. A failure loses `safeK` outright; the
   `optK` share is redeemed (`redRate`) or lost. A success converts the *whole* check
   (`safeK` + `optK`) at the round's terms, discounted by `premium`. Capital recovered from
@@ -108,12 +112,15 @@ chart, using the simplest defensible convention given the workbook has no interi
 
 - A position destined to succeed is held at cost from year 1 until its exit year, then it's
   realised (removed from NAV, added to distributions).
-- A position destined to fail is written off immediately — no interim value, since the
-  outcome distribution is known upfront in this expected-value model. A redeemed failure is
-  the exception: it's held at cost (`optK`) until the redemption year, since that capital is
-  genuinely recovered as cash then.
-- The follow-on reserve and recycled capital are held at cost from their deployment year to
-  their exit year.
+- A position destined to fail is held at cost (`checkT` for SAFE only; `safeK` plus any
+  unredeemed `optK` for SAFE + Keel) until `failYear` (default 3), then written off — the model
+  already knows it will fail, but `failYear` reflects that this isn't obvious on paper until
+  some time has passed. A redeemed failure is a separate case: its `optK` is held at cost until
+  the redemption year (`dRed`, independent of `failYear`), since that capital is genuinely
+  recovered as cash then.
+- The follow-on reserve and recycled capital are held at cost (the dollar amount allocated to
+  each bucket, before the `foStepUp` multiple is applied) from their deployment year to their
+  exit year.
 
 This choice only feeds the RVPI/TVPI-over-time chart. It never affects DPI or IRR, which come
 purely from the cash-flow rows below, matching the workbook exactly.

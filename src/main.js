@@ -42,7 +42,7 @@ function buildControls(){
     }
     const det=document.createElement("details"); det.className="grp sect-"+g.section; if(g.open) det.open=true;
     det.innerHTML=`<summary>${g.title}</summary>`;
-    if(g.id==="out"){ det.appendChild(buildOutcomesTable()); host.appendChild(det); return }
+    if(g.id==="out") det.appendChild(buildOutcomesTable());
     g.f.forEach(([k,label,min,max,step,f,hint])=>{
       const w=document.createElement("div"); w.className="field";
       const id="in_"+k;
@@ -138,7 +138,7 @@ function trio(r,fn,f){return `<div class="trio">${["T","K"].map(k=>`<div><i>${NA
 function renderStats(r){
   const s=[
     ["Net IRR","Annualised return to LPs, after fees and carry.",o=>o.irr,v=>isNaN(v)?"n/a":(v*100).toFixed(1)+"%"],
-    ["Gross MOIC","Total proceeds before fees and carry, divided by fund size.",(o,k)=>k==="T"?r.grossMultipleT:r.grossMultipleK,fmt.x],
+    ["Gross multiple on committed capital","Total proceeds before fees and carry, divided by fund size.",(o,k)=>k==="T"?r.grossMultipleT:r.grossMultipleK,fmt.x],
     ["DPI / RVPI at year 4","Cash already distributed vs. unrealised value, per dollar paid in.",o=>o,o=>o.dpi[3].toFixed(2)+" / "+o.rvpi[3].toFixed(2)],
     ["DPI / RVPI at year 6","Same, four years further into the fund's life.",o=>o,o=>o.dpi[5].toFixed(2)+" / "+o.rvpi[5].toFixed(2)],
     ["Capital lost in failures","Principal not recovered when a company fails (Keel: after fees).",(o,k)=>k==="T"?r.writeOffT:r.writeOffK,fmt.usd],

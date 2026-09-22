@@ -17,10 +17,13 @@ export const G = [
   ["MFY","Management fee period (years)",5,12,1,"n"],
   ["MF","Management fee (annual)",0,.05,.0025,"pct"],
   ["carry","Carried interest",0,.3,.05,"pct"]]},
- {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[]},
+ {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[
+  ["failYear","Failures written off by (years after initial check)",0,6,1,"yr","Until then, a failed position is still held at cost in the unrealised-value (NAV) chart, even though the model already knows it will fail — it just hasn't been marked down on paper yet. Only affects the RVPI/TVPI-over-time chart, never DPI or IRR."]]},
  {id:"fo",section:"shared",title:"Follow-on reserve (same for both strategies)",f:[
   ["reserve","Follow-on reserve (% of investable capital)",0,.5,.01,"pct"],
-  ["foYear","Follow-ons deployed (years after initial check)",0,6,1,"yr","Split evenly across surviving companies (never failures). Each company's follow-on tranche earns that company's own outcome multiple and exits in that company's own exit year — see the Outcomes table."]]},
+  ["foYear","Follow-ons deployed (years after initial check)",0,6,1,"yr","Each company's follow-on tranche exits in that company's own exit year, at that company's own outcome multiple, discounted by the step-up below — see the Outcomes table."],
+  ["foStepUp","Follow-on step-up (valuation multiple over the initial check)",1,10,.5,"x","Follow-on money buys in at a higher price than the initial check, so it earns a smaller share of the same exit: each follow-on dollar returns the outcome's multiple divided by this step-up, not the full multiple."],
+  ["foSkill","Follow-on allocation skill",0,1,.05,"pct","0% splits the reserve evenly across every surviving company. 100% puts it in the eventual winners with perfect hindsight, weighted by their size. Applies to recycled capital too."]]},
 
  {id:"checkT",section:"T",title:"Check size",open:true,f:[
   ["checkT","SAFE only: check size",50e3,3e6,25e3,"usd"]]},
@@ -44,8 +47,8 @@ export const G = [
 ];
 export const DEF = {F:50e6,MFY:10,MF:.02,carry:.2,
   checkT:500e3,safeK:0,optK:500e3,premium:0,roundVal:10e6,totalOpt:1e6,
-  reserve:.2,foYear:2,
-  failLabel:"Failure",sh0:.7,
+  reserve:.2,foYear:2,foStepUp:3,foSkill:0,
+  failLabel:"Failure",sh0:.7,failYear:3,
   outcomes:[
     {label:"Solid outcome",share:.2,mult:3,exit:6},
     {label:"Strong outcome",share:.08,mult:10,exit:7},
