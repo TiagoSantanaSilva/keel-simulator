@@ -1,15 +1,14 @@
 import "./styles.css";
 import * as XLSX from "xlsx";
-import { G, DEF, PRESETS, OUTCOMES } from "./config.js";
+import { G, DEF, OUTCOMES } from "./config.js";
 import { fmt } from "./format.js";
-import { YR, run, monte, STRONG_MULTS, OUTLIER_MULTS, grid } from "./engine.js";
+import { YR, run, monte, PREMIUMS, REDRATES, grid } from "./engine.js";
 
 // Bump whenever the input schema changes shape or meaning, so a stale save from an
 // older version of the model isn't silently merged onto new defaults.
 const SCHEMA_VERSION = 2;
 
 let S = Object.assign({}, DEF);
-let preset = "Your base case";
 
 /* ---------------- controls ---------------- */
 const $=id=>document.getElementById(id);
@@ -49,7 +48,7 @@ function buildControls(){
         ${hint?`<div class="hint" id="h_${k}">${hint}</div>`:""}`;
       det.appendChild(w);
       const inp=w.querySelector("input");
-      inp.addEventListener("input",()=>{S[k]=parseFloat(inp.value); markPreset(null); paintOut(k,f); schedule()});
+      inp.addEventListener("input",()=>{S[k]=parseFloat(inp.value); paintOut(k,f); schedule()});
     });
     host.appendChild(det);
   });
@@ -68,9 +67,9 @@ function buildOutcomesTable(){
   h+=`</tbody><tfoot><tr><td>Total</td><td id="outtotal" colspan="3"></td></tr></tfoot></table>`;
   wrap.innerHTML=h;
   OUTCOMES.forEach(([shK,mulK,exK])=>{
-    wrap.querySelector("#in_"+shK).addEventListener("input",e=>{S[shK]=parseFloat(e.target.value||0)/100; markPreset(null); paintOutcomesTable(); schedule()});
-    if(mulK) wrap.querySelector("#in_"+mulK).addEventListener("input",e=>{S[mulK]=parseFloat(e.target.value||0); markPreset(null); schedule()});
-    if(exK) wrap.querySelector("#in_"+exK).addEventListener("input",e=>{S[exK]=parseFloat(e.target.value||0); markPreset(null); schedule()});
+    wrap.querySelector("#in_"+shK).addEventListener("input",e=>{S[shK]=parseFloat(e.target.value||0)/100; paintOutcomesTable(); schedule()});
+    if(mulK) wrap.querySelector("#in_"+mulK).addEventListener("input",e=>{S[mulK]=parseFloat(e.target.value||0); schedule()});
+    if(exK) wrap.querySelector("#in_"+exK).addEventListener("input",e=>{S[exK]=parseFloat(e.target.value||0); schedule()});
   });
   return wrap;
 }
@@ -82,22 +81,6 @@ function paintOutcomesTable(){
   el.className=ok?"ok":"bad";
 }
 function paintOut(k,f){const o=$("o_"+k); if(o) o.textContent=fmt[f](S[k])}
-function syncControls(){
-  G.forEach(g=>g.f.forEach(([k,,,,,f])=>{const i=$("in_"+k); if(i) i.value=S[k]; paintOut(k,f)}));
-  OUTCOMES.forEach(([shK,mulK,exK])=>{
-    const si=$("in_"+shK); if(si) si.value=Math.round(S[shK]*100);
-    if(mulK){const mi=$("in_"+mulK); if(mi) mi.value=S[mulK]}
-    if(exK){const ei=$("in_"+exK); if(ei) ei.value=S[exK]}
-  });
-  paintOutcomesTable();
-}
-function buildPresets(){
-  const h=$("presets"); h.innerHTML="";
-  Object.keys(PRESETS).forEach(n=>{const b=document.createElement("button");b.type="button";b.textContent=n;
-    b.setAttribute("aria-pressed",String(n===preset));
-    b.onclick=()=>{S=Object.assign({},DEF,PRESETS[n]);markPreset(n);syncControls();schedule(true)}; h.appendChild(b)});
-}
-function markPreset(n){preset=n;[...$("presets").children].forEach(b=>b.setAttribute("aria-pressed",String(b.textContent===n)))}
 
 /* ---------------- rendering ---------------- */
 const COL={T:"var(--trad)",K:"var(--keel)"}, NAME={T:"SAFE only",K:"SAFE + Keel"};
@@ -193,9 +176,9 @@ function renderHist(mc){
 }
 function renderHeat(g){
   tabs("heatTabs",[["best","Best strategy"],["kt","SAFE + Keel vs SAFE only"]],heatKey,k=>{heatKey=k;renderHeat(lastGrid)});
-  let h=`<table><thead><tr><th>'Strong' multiple \\ outlier multiple</th>${OUTLIER_MULTS.map(v=>`<th>${v}x</th>`).join("")}</tr></thead><tbody>`;
-  g.forEach((row,i)=>{h+=`<tr><th>${STRONG_MULTS[i]}x</th>`;row.forEach((c,j)=>{
-    const cur=STRONG_MULTS[i]===S.mul3&&OUTLIER_MULTS[j]===S.mul4?" cur":"";
+  let h=`<table><thead><tr><th>Premium \\ redemption rate</th>${REDRATES.map(v=>`<th>${(v*100).toFixed(0)}%</th>`).join("")}</tr></thead><tbody>`;
+  g.forEach((row,i)=>{h+=`<tr><th>${(PREMIUMS[i]*100).toFixed(0)}%</th>`;row.forEach((c,j)=>{
+    const cur=PREMIUMS[i]===S.premium&&REDRATES[j]===S.redRate?" cur":"";
     if(heatKey==="best"){const best=c.K>=c.T?"K":"T";
       h+=`<td class="${cur.trim()}" style="background:color-mix(in srgb, ${COL[best]} 28%, var(--surface))">${NAME[best]}<br><span style="font-weight:400;font-size:12px">${c[best].toFixed(2)}x</span></td>`}
     else{const v=c.K-c.T, a=Math.min(1,Math.abs(v)/.4), col=v>=0?"var(--pos)":"var(--neg)";
@@ -270,9 +253,9 @@ function buildWorkbook(){
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Cash flows - "+NAME[k]);
   });
 
-  if(g){ const gridRows=[["'Strong' exit \\ outlier exit",...OUTLIER_MULTS.map(v=>v+"x (SAFE only / SAFE+Keel)")]];
-    g.forEach((row,i)=>gridRows.push([STRONG_MULTS[i]+"x",...row.map(c=>`${c.T.toFixed(2)} / ${c.K.toFixed(2)}`)]));
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(gridRows),"Exit-size grid"); }
+  if(g){ const gridRows=[["Premium \\ redemption rate",...REDRATES.map(v=>(v*100).toFixed(0)+"% (SAFE only / SAFE+Keel)")]];
+    g.forEach((row,i)=>gridRows.push([(PREMIUMS[i]*100).toFixed(0)+"%",...row.map(c=>`${c.T.toFixed(2)} / ${c.K.toFixed(2)}`)]));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(gridRows),"Premium vs redemption grid"); }
 
   return wb;
 }
@@ -310,9 +293,9 @@ try{
   const saved=JSON.parse(localStorage.getItem("keel-sim-inputs")||"null");
   if(saved&&typeof saved==="object"&&saved.v===SCHEMA_VERSION&&saved.s&&typeof saved.s==="object"){
     const clean={}; Object.keys(DEF).forEach(k=>{if(k in saved.s) clean[k]=saved.s[k]});
-    S=Object.assign({},DEF,clean); preset=null;
+    S=Object.assign({},DEF,clean);
   }else{
     localStorage.removeItem("keel-sim-inputs");
   }
 }catch(e){}
-buildPresets(); buildControls(); update();
+buildControls(); update();

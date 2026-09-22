@@ -206,5 +206,9 @@ export function monte(p,runs){
   return {T:st(resT,irrT),K:st(resK,irrK),runs,NT,NK};
 }
 
-export const STRONG_MULTS=[5,10,15,20,30], OUTLIER_MULTS=[25,50,100,150,250,500];
-export function grid(S){const g=[];STRONG_MULTS.forEach(a=>{const row=[];OUTLIER_MULTS.forEach(b=>{const r=run(Object.assign({},S,{mul3:a,mul4:b}));row.push({T:r.T.TVPI,K:r.K.TVPI})});g.push(row)});return g}
+// Premium and redemption rate are what actually decide which strategy wins (the outcome
+// multiples scale both strategies' success case equally, so they never flip the winner —
+// only the failure-side economics, driven by these two, do). Matches the workbook's own
+// Sensitivity tab, which uses the same two axes for the same reason.
+export const PREMIUMS=[0,.1,.2,.3,.4], REDRATES=[0,.2,.4,.6,.8,1];
+export function grid(S){const g=[];PREMIUMS.forEach(prem=>{const row=[];REDRATES.forEach(rr=>{const r=run(Object.assign({},S,{premium:prem,redRate:rr}));row.push({T:r.T.TVPI,K:r.K.TVPI})});g.push(row)});return g}

@@ -61,9 +61,3 @@ export const DEF = {F:50e6,MFY:10,MF:.02,carry:.2,checksPerMonth:8,
   yld:.04,yldInv:0,
   recShare:.5,recCap:.15,recMult:3,recExit:8,
   keelFee:.025};
-export const PRESETS = {
- "Your base case": {},
- "Higher redemption rate": {redRate:.9},
- "Bigger power-law year": {sh3:.1,mul3:15,sh4:.03,mul4:75},
- "Harsh market": {sh0:.85,sh2:.1,sh3:.04,sh4:.01}
-};

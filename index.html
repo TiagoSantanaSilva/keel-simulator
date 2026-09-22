@@ -15,22 +15,21 @@
 <aside class="rail" aria-label="Assumptions">
   <div class="brand"><b>Keel</b><span>seed fund simulator</span><button type="button" class="themebtn" id="themebtn" aria-label="Switch between day and night layout"></button></div>
   <div class="note">Change any assumption. Every number on the page updates.</div>
-  <div class="presets" role="group" aria-label="Scenario presets" id="presets"></div>
   <div id="controls"></div>
   <div class="warn" id="warn" role="status"></div>
 </aside>
 
 <main>
   <h1 id="headline">What a $50M seed fund returns to its LPs</h1>
-  <p class="lede">The same fund, the same companies, two ways to invest: write the full check as a SAFE, or split it into an unprotected SAFE plus a Keel Option that converts in winners and redeems in failures. Bars show net TVPI; the dashed line is where LPs get their money back.</p>
+  <p class="lede">The same fund, the same companies, two ways to invest: write the full check as a SAFE, or split it into a SAFE plus a Keel convertible.</p>
 
   <div class="hull" id="hull" aria-live="polite"></div>
   <div class="stats" id="stats"></div>
   <p class="deploywarn" id="deploywarn" role="status"></p>
 
   <section>
-    <h2>How value builds, year by year</h2>
-    <p class="sub">Year 1 is the year of the initial checks. Each outcome (returns capital, solid, strong, outlier) exits in its own year.</p>
+    <h2>Metrics year by year</h2>
+    <p class="sub">Year 1 is the year of the initial checks. Each outcome (solid, strong, outlier) exits in its own year.</p>
     <div class="chartbox" style="position:relative">
       <div class="tabs" role="tablist" id="chartTabs"></div>
       <div id="chart"></div>
@@ -49,8 +48,8 @@
   </section>
 
   <section>
-    <h2>Which strategy wins, by exit size</h2>
-    <p class="sub">Every cell reruns the model with a different multiple for strong outcomes (rows) and outliers (columns). The outlined cell is your current case.</p>
+    <h2>Which strategy wins, by premium and redemption rate</h2>
+    <p class="sub">Every cell reruns the model with a different valuation premium (rows) and redemption rate (columns) — the two assumptions that actually decide the winner, since outcome multiples scale both strategies' upside equally. The outlined cell is your current case.</p>
     <div class="tabs" role="tablist" id="heatTabs"></div>
     <div class="heat" id="heat"></div>
   </section>
