@@ -193,7 +193,7 @@ function renderChart(r){
   lineChart("chart",["T","K"].map(k=>({n:NAME[k],c:COL[k],v:r[k][chartKey]})),yfmt,money||pctv?0:1);
 }
 function renderHist(mc){
-  const W=760,H=240,m={l:48,r:14,t:10,b:30};
+  const W=760,H=256,m={l:48,r:14,t:10,b:46};
   const all=[...mc.T.arr,...mc.K.arr], lo=0, hi=Math.max(2,Math.min(8,[...all].sort((a,b)=>a-b)[Math.floor(all.length*.99)]*1.05));
   const bins=40, bw=(hi-lo)/bins;
   const hist=a=>{const h=new Array(bins).fill(0);a.forEach(v=>{const i=Math.min(bins-1,Math.max(0,Math.floor((v-lo)/bw)));h[i]++});return h.map(c=>c/a.length)};
@@ -203,7 +203,8 @@ function renderHist(mc){
   const x=v=>m.l+(v-lo)*(W-m.l-m.r)/(hi-lo), y=v=>m.t+(ymax-v)*(H-m.t-m.b)/ymax;
   let g="";
   for(let v=0;v<=ymax+1e-9;v+=ystep) g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${(v*100).toFixed(0)}%</text>`;
-  for(let v=0;v<=hi+1e-9;v+=hi>4?1:.5) g+=`<text x="${x(v)}" y="${H-10}" text-anchor="middle">${v}x</text>`;
+  for(let v=0;v<=hi+1e-9;v+=hi>4?1:.5) g+=`<text x="${x(v)}" y="${H-26}" text-anchor="middle">${v}x</text>`;
+  g+=`<text x="${(m.l+W-m.r)/2}" y="${H-6}" text-anchor="middle" style="fill:var(--muted)">Net TVPI (money multiple returned to LPs)</text>`;
   g+=`<line x1="${x(1)}" x2="${x(1)}" y1="${m.t}" y2="${y(0)}" stroke="var(--water)" stroke-dasharray="5 4" stroke-width="1.5"/><text x="${x(1)+6}" y="${m.t+12}" style="fill:var(--water)">money back</text>`;
   ["T","K"].forEach(k=>{let d=`M${x(lo)},${y(0)}`;H2[k].forEach((c,i)=>{d+=` L${x(lo+i*bw)},${y(c)} L${x(lo+(i+1)*bw)},${y(c)}`});d+=` L${x(hi)},${y(0)}`;
     g+=`<path d="${d}" fill="${COL[k]}" fill-opacity="${k==='K'?.22:.1}" stroke="${COL[k]}" stroke-width="2"/>`});
