@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEF, OUTCOMES } from "../src/config.js";
-import { run, monte, irr, grid, YR } from "../src/engine.js";
+import { run, monte, irr, YR } from "../src/engine.js";
 
 // Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for one deliberate
 // deviation from the workbook: Keel pricing is a single flat annual reserve fee (`keelFee`)
@@ -144,24 +144,6 @@ describe("Monte Carlo", () => {
   });
 });
 
-describe("premium vs redemption-rate grid", () => {
-  it("has 5 rows and 6 columns", () => {
-    const g = grid(DEF);
-    expect(g.length).toBe(5);
-    g.forEach(row => expect(row.length).toBe(6));
-  });
-
-  it("actually flips the winner somewhere in the grid", () => {
-    // Regression guard: an earlier version of this grid varied the outcome multiples, which
-    // scale both strategies' success case equally and so never change who wins -- every cell
-    // showed Keel, which is not useful as a "which strategy wins" chart. Premium and
-    // redemption rate are what actually drive the failure-side economics that decide it.
-    const g = grid(DEF);
-    const results = g.flat().map(c => c.K >= c.T);
-    expect(results.some(v => v)).toBe(true);
-    expect(results.some(v => !v)).toBe(true);
-  });
-});
 
 describe("outcome buckets", () => {
   it("has no 'returns capital' bucket, and the remaining shares still sum to 100%", () => {

@@ -26,7 +26,8 @@ button,input,select{font:inherit;color:inherit}
 /* control rail */
 .rail{background:var(--surface);border-right:1px solid var(--line);padding:22px 20px 40px;position:sticky;top:0;height:100vh;overflow-y:auto}
 @media (max-width:900px){.rail{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}}
-.brand{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.brand .logo{width:26px;height:26px;border-radius:6px;flex-shrink:0}
 .brand b{font-size:22px;font-weight:800;letter-spacing:-.02em}
 .brand span{color:var(--muted);font-size:13px;flex:1}
 .themebtn{border:1px solid var(--line);background:var(--sunk);color:var(--ink);border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap}
@@ -108,14 +109,8 @@ section{margin-top:44px}
 .tabs button[aria-selected="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 svg text{fill:var(--muted);font-size:11px;font-family:inherit}
 .legend{display:flex;gap:16px;font-size:13px;color:var(--muted);margin:6px 2px}
-.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12px;padding:6px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-110%);display:none}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12px;padding:6px 8px;border-radius:6px;white-space:nowrap;display:none;z-index:2}
 
-/* grid heatmap */
-.heat{overflow-x:auto}
-.heat table{border-collapse:separate;border-spacing:3px;font-size:13px}
-.heat th{font-weight:600;color:var(--muted);padding:4px 8px;text-align:center;white-space:nowrap}
-.heat td{padding:10px 8px;min-width:88px;text-align:center;border-radius:6px;font-weight:600}
-.heat td.cur{outline:2px solid var(--ink);outline-offset:-2px}
 
 /* tables */
 .tblwrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}

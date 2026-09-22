@@ -2,7 +2,7 @@ import "./styles.css";
 import * as XLSX from "xlsx";
 import { G, DEF, OUTCOMES } from "./config.js";
 import { fmt } from "./format.js";
-import { YR, run, monte, PREMIUMS, REDRATES, grid } from "./engine.js";
+import { YR, run, monte } from "./engine.js";
 
 // Bump whenever the input schema changes shape or meaning, so a stale save from an
 // older version of the model isn't silently merged onto new defaults.
@@ -84,7 +84,7 @@ function paintOut(k,f){const o=$("o_"+k); if(o) o.textContent=fmt[f](S[k])}
 
 /* ---------------- rendering ---------------- */
 const COL={T:"var(--trad)",K:"var(--keel)"}, NAME={T:"SAFE only",K:"SAFE + Keel"};
-let chartKey="tvpi", heatKey="best", cfKey="K", last=null, lastMC=null, lastGrid=null;
+let chartKey="tvpi", cfKey="K", last=null, lastMC=null;
 
 function renderHull(r){
   const vals=[r.T.TVPI,r.K.TVPI], max=Math.max(1.5,...vals)*1.12;
@@ -104,7 +104,7 @@ function trio(r,fn,f){return `<div class="trio">${["T","K"].map(k=>`<div><i>${NA
 function renderStats(r){
   const s=[
     ["Net IRR","Annualised return to LPs, after fees and carry.",o=>o.irr,v=>isNaN(v)?"n/a":(v*100).toFixed(1)+"%"],
-    ["Gross multiple","Total proceeds before fees and carry, divided by fund size.",(o,k)=>k==="T"?r.grossMultipleT:r.grossMultipleK,fmt.x],
+    ["Gross MOIC","Total proceeds before fees and carry, divided by fund size.",(o,k)=>k==="T"?r.grossMultipleT:r.grossMultipleK,fmt.x],
     ["DPI / RVPI at year 4","Cash already distributed vs. unrealised value, per dollar paid in.",o=>o,o=>o.dpi[3].toFixed(2)+" / "+o.rvpi[3].toFixed(2)],
     ["DPI / RVPI at year 6","Same, four years further into the fund's life.",o=>o,o=>o.dpi[5].toFixed(2)+" / "+o.rvpi[5].toFixed(2)],
     ["Capital lost in failures","Principal not recovered when a company fails (Keel: after fees).",(o,k)=>k==="T"?r.writeOffT:r.writeOffK,fmt.usd],
@@ -142,7 +142,7 @@ function lineChart(host,series,yfmt,zeroLine){
   svg.addEventListener("mousemove",ev=>{const b=svg.getBoundingClientRect(), px=(ev.clientX-b.left)*W/b.width, i=Math.round((px-m.l)/((W-m.l-m.r)/(YR.length-1)));
     if(i<0||i>=YR.length){tip.style.display="none";return}
     tip.innerHTML=`Year ${YR[i]}<br>`+series.map(s=>`${s.n}: ${isNaN(s.v[i])?"n/a":yfmt(s.v[i],true)}`).join("<br>");
-    const box=el.parentElement.getBoundingClientRect(); tip.style.left=(b.left-box.left+x(i)*b.width/W)+"px"; tip.style.top=(b.top-box.top+m.t*b.height/H+20)+"px"; tip.style.display="block"});
+    const box=el.parentElement.getBoundingClientRect(); tip.style.left=(ev.clientX-box.left+14)+"px"; tip.style.top=(ev.clientY-box.top-40)+"px"; tip.style.display="block"});
   svg.addEventListener("mouseleave",()=>tip.style.display="none");
 }
 function renderChart(r){
@@ -173,18 +173,6 @@ function renderHist(mc){
     <dt>Median fund</dt><dd>${s.p50.toFixed(2)}x</dd><dt>Best 10% of funds</dt><dd>${s.p90.toFixed(2)}x</dd><dt>Average</dt><dd>${s.mean.toFixed(2)}x</dd>
     <dt>Average net IRR</dt><dd>${isNaN(s.irrMean)?"n/a":(s.irrMean*100).toFixed(1)+"%"}</dd></dl></div>`}).join("");
 }
-function renderHeat(g){
-  tabs("heatTabs",[["best","Best strategy"],["kt","SAFE + Keel vs SAFE only"]],heatKey,k=>{heatKey=k;renderHeat(lastGrid)});
-  let h=`<table><thead><tr><th>Premium \\ redemption rate</th>${REDRATES.map(v=>`<th>${(v*100).toFixed(0)}%</th>`).join("")}</tr></thead><tbody>`;
-  g.forEach((row,i)=>{h+=`<tr><th>${(PREMIUMS[i]*100).toFixed(0)}%</th>`;row.forEach((c,j)=>{
-    const cur=PREMIUMS[i]===S.premium&&REDRATES[j]===S.redRate?" cur":"";
-    if(heatKey==="best"){const best=c.K>=c.T?"K":"T";
-      h+=`<td class="${cur.trim()}" style="background:color-mix(in srgb, ${COL[best]} 28%, var(--surface))">${NAME[best]}<br><span style="font-weight:400;font-size:12px">${c[best].toFixed(2)}x</span></td>`}
-    else{const v=c.K-c.T, a=Math.min(1,Math.abs(v)/.4), col=v>=0?"var(--pos)":"var(--neg)";
-      h+=`<td class="${cur.trim()}" style="background:color-mix(in srgb, ${col} ${Math.round(a*45)}%, var(--surface))">${fmt.dx(v)}</td>`}
-  });h+="</tr>"});
-  $("heat").innerHTML=h+"</tbody></table>";
-}
 function renderFounder(){
   const p=S, keepConv=1-p.redRate, dil=v=>p.roundVal?v/p.roundVal:0;
   const fmtVal=(v,f)=>f==="pct"?fmt.pct1(v):f==="n"?v.toFixed(1):fmt.usdFull(v);
@@ -192,9 +180,9 @@ function renderFounder(){
   // headline treatment; everything else sits in a compact two-column grid below it.
   const cards=[
     ["Normal round",["SAFE only",[["Cash at close",p.checkT],["Dilution at this round's valuation",dil(p.checkT),"pct"],["Total capital received",p.checkT,null,true]]]],
-    ["If the company succeeds",["SAFE + Keel",[["Cash at close",p.safeK],["Converts after "+p.dConv+" years",p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution, "+p.dConv+"y",p.yld*p.optK*p.dConv],["Total capital received",p.safeK+p.optK,null,true]]]],
-    ["If the company fails",["SAFE + Keel",[["Cash at close",p.safeK],["Redeemed after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["This fund's yield contribution, "+p.dRed+"y",p.yld*p.optK*p.dRed],["Total capital received",p.safeK+p.optK*keepConv,null,true]]]],
-    ["Across the whole round",["All protected investors",[["Round valuation (post-money)",p.roundVal],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],["Total yield if it succeeds, "+p.dConv+"y",p.yld*p.totalOpt*p.dConv],["Total yield if it fails, "+p.dRed+"y",p.yld*p.totalOpt*p.dRed],["Total convertible amount in the round",p.totalOpt,null,true]]]]];
+    ["If the company succeeds",["SAFE + Keel",[["Cash at close",p.safeK],["Converts after "+p.dConv+" years",p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution, "+p.dConv+"y",p.yld*p.optK*p.dConv],["Converted round-wide (all investors)",p.totalOpt],["Yield earned round-wide, "+p.dConv+"y",p.yld*p.totalOpt*p.dConv],["Total capital received",p.safeK+p.optK,null,true]]]],
+    ["If the company fails",["SAFE + Keel",[["Cash at close",p.safeK],["Redeemed after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["This fund's yield contribution, "+p.dRed+"y",p.yld*p.optK*p.dRed],["Redeemed round-wide (all investors)",p.totalOpt*p.redRate],["Yield earned round-wide, "+p.dRed+"y",p.yld*p.totalOpt*p.dRed],["Total capital received",p.safeK+p.optK*keepConv,null,true]]]],
+    ["Across the whole round",["All protected investors",[["Round valuation (post-money)",p.roundVal],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],["Total convertible amount in the round",p.totalOpt,null,true]]]]];
   $("founder").innerHTML=cards.map(([t,[badge,rows]])=>{
     const hero=rows.find(r=>r[3]), rest=rows.filter(r=>!r[3]);
     return `<div class="founder">
@@ -228,7 +216,7 @@ function warnings(){
 
 /* ---------------- XLSX export ---------------- */
 function buildWorkbook(){
-  const r=last, mc=lastMC, g=lastGrid;
+  const r=last, mc=lastMC;
   const wb=XLSX.utils.book_new();
 
   const inputRows=[["Keel fund simulator export"],[],["INPUTS","Value"]];
@@ -243,7 +231,7 @@ function buildWorkbook(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(inputRows),"Inputs");
 
   const results=[["RESULTS","SAFE only","SAFE + Keel"],
-    ["Net TVPI",r.T.TVPI,r.K.TVPI],["Net IRR",r.T.irr,r.K.irr],["Gross multiple",r.grossMultipleT,r.grossMultipleK],
+    ["Net TVPI",r.T.TVPI,r.K.TVPI],["Net IRR",r.T.irr,r.K.irr],["Gross MOIC",r.grossMultipleT,r.grossMultipleK],
     ["DPI at year 4",r.T.dpi[3],r.K.dpi[3]],["RVPI at year 4",r.T.rvpi[3],r.K.rvpi[3]],
     ["DPI at year 6",r.T.dpi[5],r.K.dpi[5]],["RVPI at year 6",r.T.rvpi[5],r.K.rvpi[5]],
     ["Capital lost in failures",r.writeOffT,r.writeOffK],["Seed positions backed",r.d.NT,r.d.NK],
@@ -259,10 +247,6 @@ function buildWorkbook(){
     cfRows(o).forEach(([l,v])=>rows.push([l,...v]));
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Cash flows - "+NAME[k]);
   });
-
-  if(g){ const gridRows=[["Premium \\ redemption rate",...REDRATES.map(v=>(v*100).toFixed(0)+"% (SAFE only / SAFE+Keel)")]];
-    g.forEach((row,i)=>gridRows.push([(PREMIUMS[i]*100).toFixed(0)+"%",...row.map(c=>`${c.T.toFixed(2)} / ${c.K.toFixed(2)}`)]));
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(gridRows),"Premium vs redemption grid"); }
 
   return wb;
 }
@@ -293,7 +277,7 @@ function schedule(now){clearTimeout(timer);timer=setTimeout(update,now?0:60)}
 function update(){
   if(!warnings()) return;
   last=run(S); renderHull(last); renderStats(last); renderChart(last); renderCF(last); renderFounder();
-  clearTimeout(mcTimer); mcTimer=setTimeout(()=>{lastMC=monte(S,2000);renderHist(lastMC);lastGrid=grid(S);renderHeat(lastGrid);
+  clearTimeout(mcTimer); mcTimer=setTimeout(()=>{lastMC=monte(S,2000);renderHist(lastMC);
     try{localStorage.setItem("keel-sim-inputs",JSON.stringify({v:SCHEMA_VERSION,s:S}))}catch(e){}},180);
 }
 try{
