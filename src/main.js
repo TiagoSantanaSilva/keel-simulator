@@ -248,8 +248,9 @@ function renderCF(r){
 function warnings(){
   const w=[]; const shareSum=S.sh0+S.outcomes.reduce((a,o)=>a+o.share,0);
   if(Math.abs(shareSum-1)>0.001) w.push(`Outcome shares sum to ${(shareSum*100).toFixed(0)}%, not 100%.`);
-  if(S.foExit<=S.foYear) w.push("Follow-ons must exit after they're deployed.");
-  if(S.foExit<=S.dRed) w.push("Follow-ons must exit after the redemption year (recycled capital shares this exit).");
+  const minExit=S.outcomes.length?Math.min(...S.outcomes.map(o=>o.exit)):Infinity;
+  if(S.outcomes.length&&S.foYear>=minExit) w.push("Follow-ons must be deployed before the earliest outcome's exit year.");
+  if(S.outcomes.length&&S.dRed>=minExit) w.push("Redemptions must happen before the earliest outcome's exit year, so recycled capital has time to be deployed.");
   $("warn").textContent=w.join(" ");
   return w.length===0;
 }

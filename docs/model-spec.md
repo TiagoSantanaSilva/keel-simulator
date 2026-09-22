@@ -30,23 +30,22 @@ Modelling a staggered vintage properly would mean moving the whole engine to mon
 resolution (every formula here is keyed off a single check date) — a possible future change,
 not attempted as a partial fix.
 
-**Follow-ons and recycled capital are lump sums, not attributed to individual companies.**
-Each outcome bucket carries its own exit year, but `foExit` is a single year for the *entire*
-pool — matching the workbook's own "blended return on follow-on capital, same for both funds"
-framing. Modelling per-company follow-on timing would mean tracking which specific companies
-received follow-on and recycled capital and when each one individually exits, which this
-expected-value model doesn't do.
-
-**Recycled capital shares the follow-on reserve's multiple and exit year** (`foMult`,
-`foExit`) rather than having its own. There used to be a separate `recMult`/`recExit`, but
-since recycled capital is deployed the same way as the primary follow-on reserve — into
-winners, at the next round — there was no basis for it to earn a different return on a
-different timeline, so the two were merged.
+**Follow-ons and recycled capital are attributed per surviving company, riding that company's
+own outcome.** The reserve (and, for SAFE + Keel, recycled capital) is split evenly across every
+surviving company, in proportion to each outcome bucket's share (`foPerShareT`/`foPerShareK` =
+reserve ÷ total surviving share). Each bucket's follow-on tranche then earns *that bucket's own*
+`mult` and pays out in *that bucket's own* `exit` year — there's no separate follow-on multiple
+or exit-year input; the money simply rides along with whichever company it went into, using the
+Outcomes table that's already there. This replaced an earlier design with a single blended
+`foMult`/`foExit` (and, before that, a separate `recMult`/`recExit`) applied to the whole pool —
+there was no basis for follow-on or recycled dollars to earn a flat return disconnected from
+which company they actually followed on into.
 
 - **Year 1:** initial checks. Management fees are charged for `MFY` years starting here.
-- **Years 2 to `dConv`+1:** Keel charges its annual fee on positions still protected and
-  awaiting a conversion decision.
-- **Years 2 to `dRed`+1:** Keel charges its annual fee on positions still protected and
+- **Years 1 to `dConv`:** Keel charges its annual fee on positions still protected and
+  awaiting a conversion decision, the same way management fees and the initial capital call
+  both start in year 1.
+- **Years 1 to `dRed`:** Keel charges its annual fee on positions still protected and
   awaiting a redemption decision. At year `dRed`+1, failed positions are redeemed (a share
   `redRate` of them) or written off (the rest).
 - **Year `foYear`+1:** the follow-on reserve is deployed (net of Keel fees, for SAFE + Keel).

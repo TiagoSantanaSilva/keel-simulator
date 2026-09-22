@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { DEF } from "../src/config.js";
 import { run, monte, irr, YR } from "../src/engine.js";
 
-// Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for three deliberate
+// Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for four deliberate
 // deviations from the workbook:
 // 1. Keel pricing is a single flat annual reserve fee (`keelFee`) instead of the workbook's
 //    tiered licence + banded annual fee, at the user's request for a simpler pricing control.
@@ -10,28 +10,38 @@ import { run, monte, irr, YR } from "../src/engine.js";
 // 2. Recycling has no cap (the workbook's `recCap` has been removed), at the user's request.
 //    The default recShare (50%) no longer gets capped at 15% of fund size, so recycled/
 //    distFromRedK are higher than an uncapped-vs-capped comparison would otherwise show.
-// 3. Recycled capital shares the follow-on reserve's multiple and exit year (`foMult`,
-//    `foExit`) instead of its own `recMult`/`recExit`, at the user's request -- there was no
-//    basis for recycled capital to earn a different return on a different timeline from the
-//    primary follow-on reserve, since both are deployed the same way. TVPI/DPI are unaffected
-//    (same defaults, 3x either way), but K.irr shifts since the exit moved from year 8 to 7.
+// 3. Follow-on and recycled capital no longer have their own blended `foMult`/`recMult`.
+//    Both are split evenly per surviving company and each company's tranche earns *that
+//    company's own* outcome multiple and exit year (from the Outcomes table), at the user's
+//    request -- there was no basis for follow-on money to earn a flat return disconnected
+//    from which company it actually went into. At the default outcome mix, this raises the
+//    effective follow-on multiple from a flat 3x to a share-weighted ~8x, since a slice of
+//    every follow-on dollar now rides the outlier multiple. TVPI/IRR are both substantially
+//    higher than before as a result -- this is the expected effect of the change, not drift.
+// 4. Keel fees now accrue starting the same year the check is written (year 1), not year 2.
+//    The old `t>=1&&t<=dConv`/`t>=1&&t<=dRed` conditions charged the first fee a year late --
+//    inconsistent with the management fee and the initial capital call, both of which start
+//    at year 1, and with the fact that the conversion/redemption decision itself already
+//    fires correctly at year `dConv`/`dRed`+1 elsewhere in the model. Fixed to `t<dConv`/
+//    `t<dRed`. Total fee dollars are unchanged (still `dConv`/`dRed` years' worth); paying
+//    them a year earlier costs LPs a bit more time value, so K.irr drops very slightly.
 // If a change moves these numbers on purpose, update them here and say why in the commit.
 describe("deterministic engine, default inputs", () => {
   const r = run(DEF);
 
   it("matches the expected net TVPI", () => {
-    expect(r.T.TVPI).toBeCloseTo(1.8128, 3);
-    expect(r.K.TVPI).toBeCloseTo(2.25344, 3);
+    expect(r.T.TVPI).toBeCloseTo(2.4528, 3);
+    expect(r.K.TVPI).toBeCloseTo(3.40384, 3);
   });
 
   it("matches the expected net IRR", () => {
-    expect(r.T.irr).toBeCloseTo(0.1036283447, 3);
-    expect(r.K.irr).toBeCloseTo(0.1530585828, 3);
+    expect(r.T.irr).toBeCloseTo(0.1580622813, 3);
+    expect(r.K.irr).toBeCloseTo(0.2293210558, 3);
   });
 
   it("matches the expected gross multiple", () => {
-    expect(r.grossMultipleT).toBeCloseTo(2.016, 2);
-    expect(r.grossMultipleK).toBeCloseTo(2.5668, 2);
+    expect(r.grossMultipleT).toBeCloseTo(2.816, 2);
+    expect(r.grossMultipleK).toBeCloseTo(4.0048, 2);
   });
 
   it("matches the expected DPI at year 4 and year 6", () => {

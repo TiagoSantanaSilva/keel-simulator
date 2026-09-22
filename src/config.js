@@ -20,9 +20,7 @@ export const G = [
  {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[]},
  {id:"fo",section:"shared",title:"Follow-on reserve (same for both strategies)",f:[
   ["reserve","Follow-on reserve (% of investable capital)",0,.5,.01,"pct"],
-  ["foMult","Follow-on multiple (gross)",1,6,.25,"x"],
-  ["foYear","Follow-ons deployed (years after initial check)",0,6,1,"yr"],
-  ["foExit","Follow-ons exit (years after initial check)",1,11,1,"yr"]]},
+  ["foYear","Follow-ons deployed (years after initial check)",0,6,1,"yr","Split evenly across surviving companies (never failures). Each company's follow-on tranche earns that company's own outcome multiple and exits in that company's own exit year — see the Outcomes table."]]},
 
  {id:"checkT",section:"T",title:"Check size",open:true,f:[
   ["checkT","SAFE only: check size",50e3,3e6,25e3,"usd"]]},
@@ -40,13 +38,13 @@ export const G = [
  {id:"yld",section:"K",title:"Reserve yield",f:[
   ["yld","Reserve yield (annual)",0,.12,.005,"pct"]]},
  {id:"rec",section:"K",title:"Recycling",f:[
-  ["recShare","Share of recovered capital recycled into follow-ons",0,1,.05,"pct","Into winners' next round, uncapped. The rest is distributed to LPs. Recycled capital shares the follow-on reserve's multiple and exit year."]]},
+  ["recShare","Share of recovered capital recycled into follow-ons",0,1,.05,"pct","Into winners' next round, uncapped. The rest is distributed to LPs. Like the follow-on reserve, it's split per surviving company and earns each company's own outcome multiple."]]},
  {id:"pricing",section:"K",title:"Keel pricing",f:[
   ["keelFee","Reserve fee paid by the fund (annual)",0,.05,.0025,"pct2","Charged on the Keel reserve balance, while it's deployed."]]},
 ];
 export const DEF = {F:50e6,MFY:10,MF:.02,carry:.2,
   checkT:500e3,safeK:0,optK:500e3,premium:0,roundVal:10e6,totalOpt:1e6,
-  reserve:.2,foMult:3,foYear:2,foExit:7,
+  reserve:.2,foYear:2,
   failLabel:"Failure",sh0:.7,
   outcomes:[
     {label:"Solid outcome",share:.2,mult:3,exit:6},

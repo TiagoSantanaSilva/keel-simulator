@@ -14,6 +14,9 @@ export const YR = [1,2,3,4,5,6,7,8,9,10,11,12];
 // {label, share, mult, exit}, so the table can grow or shrink freely and each
 // row is looked up by array position instead of a fixed field name.
 const successMix=p=>p.outcomes.reduce((a,o)=>a+o.share*o.mult,0);
+// Total share of positions that don't fail -- i.e. the ones a fund could plausibly
+// follow on into or recycle capital into, since a failed company never raises again.
+const survivorShare=p=>p.outcomes.reduce((a,o)=>a+o.share,0);
 
 export function irr(cf){
   const npv=r=>{let f=1,s=0;for(let i=0;i<cf.length;i++){s+=cf[i]/f;f*=(1+r)}return s};
@@ -31,12 +34,21 @@ export function derive(p){
   d.checkPool=d.I*(1-p.reserve);
   d.foReserve=d.I*p.reserve;
   d.checkK=p.safeK+p.optK;
+  d.survivorShare=survivorShare(p);
 
   // SAFE only
   d.NT=p.checkT>0?d.checkPool/p.checkT:0;
   d.failedT=d.NT*p.sh0;
   d.successT=d.NT*p.checkT*successMix(p);
-  d.grossT=d.successT+d.foReserve*p.foMult;
+  // Follow-on capital is split evenly per surviving company (never into failures, since a
+  // failed company doesn't raise a next round), and each company's follow-on tranche earns
+  // *that company's own* outcome multiple -- a follow-on check into an eventual outlier
+  // returns the outlier multiple, not some separate blended assumption. foPerShareT is
+  // dollars per unit of outcome share; multiplying by a bucket's share gives that bucket's
+  // aggregate follow-on tranche.
+  d.foPerShareT=d.survivorShare>0?d.foReserve/d.survivorShare:0;
+  d.followOnValueT=p.outcomes.reduce((a,o)=>a+o.share*d.foPerShareT*o.mult,0);
+  d.grossT=d.successT+d.followOnValueT;
   d.writeOffT=d.failedT*p.checkT;
 
   // SAFE + Option
@@ -54,7 +66,14 @@ export function derive(p){
   d.recycled=d.recovered*p.recShare;
   d.distFromRed=d.recovered-d.recycled;
   d.successK=d.NK*d.checkK*successMix(p);
-  d.grossK=d.successK/(1+p.premium)+d.foReserveK*p.foMult+d.distFromRed+d.recycled*p.foMult;
+  d.foPerShareK=d.survivorShare>0?d.foReserveK/d.survivorShare:0;
+  d.followOnValueK=p.outcomes.reduce((a,o)=>a+o.share*d.foPerShareK*o.mult,0);
+  // Recycled capital gets the same per-survivor, per-bucket-multiple treatment as the
+  // primary follow-on reserve -- it's deployed the same way (into winners' next round) --
+  // but it's a separate pool because it's called at a different year (dRed, not foYear).
+  d.recPerShareK=d.survivorShare>0?d.recycled/d.survivorShare:0;
+  d.recycledValueK=p.outcomes.reduce((a,o)=>a+o.share*d.recPerShareK*o.mult,0);
+  d.grossK=d.successK/(1+p.premium)+d.followOnValueK+d.distFromRed+d.recycledValueK;
   d.writeOffK=d.failedK*p.safeK+(d.failedK-d.redeemedK)*p.optK+d.totalFees;
 
   return d;
@@ -109,35 +128,36 @@ export function run(p){
     T.paid[t]=a+b;
 
     let e=0;
-    p.outcomes.forEach(o=>{if(t===o.exit) e+=d.NT*p.checkT*o.share*o.mult});
-    if(t===p.foExit) e+=d.foReserve*p.foMult;
-    R(T,"Exits",t,e);
+    p.outcomes.forEach(o=>{if(t===o.exit) e+=(d.NT*p.checkT*o.share+o.share*d.foPerShareT)*o.mult});
+    R(T,"Exits (initial + follow-on)",t,e);
     T.dist[t]=e;
 
     let n=0;
-    p.outcomes.forEach(o=>{if(t<o.exit) n+=d.NT*p.checkT*o.share});
-    if(t>=p.foYear&&t<p.foExit) n+=d.foReserve;
+    p.outcomes.forEach(o=>{
+      if(t<o.exit) n+=d.NT*p.checkT*o.share;
+      if(t>=p.foYear&&t<o.exit) n+=o.share*d.foPerShareT;
+    });
     T.nav[t]=n;
 
     // ---- SAFE + Option ----
     a=mg(t); b=(t===0?d.checkPool:0)+(t===p.foYear?d.foReserveK:0);
-    const fee=(t===0?d.licence:0)+(t>=1&&t<=p.dConv?d.convertedK*d.feePerPos:0)+(t>=1&&t<=p.dRed?d.redeemedK*d.feePerPos:0);
+    const fee=(t===0?d.licence:0)+(t<p.dConv?d.convertedK*d.feePerPos:0)+(t<p.dRed?d.redeemedK*d.feePerPos:0);
     R(K,"Management fees called",t,a); R(K,"Capital called for investments",t,b); R(K,"Keel fees",t,fee);
     K.paid[t]=a+b+fee;
 
     e=0;
-    p.outcomes.forEach(o=>{if(t===o.exit) e+=d.NK*d.checkK*o.share*o.mult/(1+p.premium)});
+    p.outcomes.forEach(o=>{if(t===o.exit) e+=d.NK*d.checkK*o.share*o.mult/(1+p.premium)+(o.share*d.foPerShareK+o.share*d.recPerShareK)*o.mult});
     if(t===p.dRed) e+=d.distFromRed;
-    if(t===p.foExit) e+=(d.foReserveK+d.recycled)*p.foMult;
-    R(K,"Exits and redemptions",t,e);
-    R(K,"Recycled into winners' next round",t,t===p.foExit?d.recycled*p.foMult:0);
+    R(K,"Exits and redemptions (initial + follow-on + recycled)",t,e);
     K.dist[t]=e;
 
     n=0;
-    p.outcomes.forEach(o=>{if(t<o.exit) n+=d.NK*d.checkK*o.share});
+    p.outcomes.forEach(o=>{
+      if(t<o.exit) n+=d.NK*d.checkK*o.share;
+      if(t>=p.foYear&&t<o.exit) n+=o.share*d.foPerShareK;
+      if(t>=p.dRed&&t<o.exit) n+=o.share*d.recPerShareK;
+    });
     if(t<p.dRed) n+=d.redeemedK*p.optK;
-    if(t>=p.foYear&&t<p.foExit) n+=d.foReserveK;
-    if(t>=p.dRed&&t<p.foExit) n+=d.recycled;
     K.nav[t]=n;
   }
 
@@ -181,9 +201,13 @@ export function monte(p,runs){
   for(let r=0;r<runs;r++){
     const cT=draw(NT), cK=draw(NK);
 
+    // Follow-on/recycled capital is split evenly across however many companies actually
+    // survived *in this simulated run* -- not the expected count -- so a lucky run with
+    // more survivors spreads the same reserve thinner, same as it would in reality.
+    const survivorsT=NT-cT[0];
+    const foPerCompanyT=survivorsT>0?d.foReserve/survivorsT:0;
     const distT=new Array(N).fill(0);
-    p.outcomes.forEach((o,i)=>{if(o.exit<N) distT[o.exit]+=cT[i+1]*p.checkT*o.mult});
-    if(p.foExit<N)distT[p.foExit]+=d.foReserve*p.foMult;
+    p.outcomes.forEach((o,i)=>{if(o.exit<N) distT[o.exit]+=cT[i+1]*(p.checkT+foPerCompanyT)*o.mult});
     let cgd=0,lpcPrev=0;const netT=new Array(N);
     for(let t=0;t<N;t++){cgd+=distT[t];const lpc=wf(cgd);netT[t]=(lpc-lpcPrev)-paidT[t];lpcPrev=lpc}
     resT.push(p.F?lpcPrev/p.F:0);
@@ -195,16 +219,18 @@ export function monte(p,runs){
     const recovered=redeemedK*p.optK;
     const recycled=recovered*p.recShare;
     const distFromRed=recovered-recycled;
+    const survivorsK=NK-cK[0];
+    const foPerCompanyK=survivorsK>0?foReserveK/survivorsK:0;
+    const recPerCompanyK=survivorsK>0?recycled/survivorsK:0;
 
     const paidK=new Array(N).fill(0), distK=new Array(N).fill(0);
     for(let t=0;t<N;t++){
       const a=mg(t), b=(t===0?d.checkPool+d.licence:0)+(t===p.foYear?foReserveK:0);
-      const fee=(t>=1&&t<=p.dConv?convertedK*d.feePerPos:0)+(t>=1&&t<=p.dRed?redeemedK*d.feePerPos:0);
+      const fee=(t<p.dConv?convertedK*d.feePerPos:0)+(t<p.dRed?redeemedK*d.feePerPos:0);
       paidK[t]=a+b+fee;
     }
-    p.outcomes.forEach((o,i)=>{if(o.exit<N) distK[o.exit]+=cK[i+1]*d.checkK*o.mult/(1+p.premium)});
+    p.outcomes.forEach((o,i)=>{if(o.exit<N) distK[o.exit]+=cK[i+1]*(d.checkK*o.mult/(1+p.premium)+(foPerCompanyK+recPerCompanyK)*o.mult)});
     if(p.dRed<N)distK[p.dRed]+=distFromRed;
-    if(p.foExit<N)distK[p.foExit]+=(foReserveK+recycled)*p.foMult;
     cgd=0;lpcPrev=0;const netK=new Array(N);
     for(let t=0;t<N;t++){cgd+=distK[t];const lpc=wf(cgd);netK[t]=(lpc-lpcPrev)-paidK[t];lpcPrev=lpc}
     resK.push(p.F?lpcPrev/p.F:0);
