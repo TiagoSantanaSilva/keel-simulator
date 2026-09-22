@@ -111,7 +111,13 @@ function renderStats(r){
     ["Seed positions backed","Expected number of companies funded from the initial check pool.",(o,k)=>k==="T"?r.d.NT:r.d.NK,v=>v.toFixed(1)],
   ];
   let h=s.map(([t,def,fn,f])=>`<div class="stat"><h3>${t}</h3><div class="kpidef">${def}</div>${trio(r,fn,f)}</div>`).join("");
-  h+=`<div class="stat"><h3>Keel: recovered from failures</h3><div class="kpidef">Redeemed protected capital, split between recycling and an LP distribution.</div><div style="font-size:18px;font-weight:700" class="k">${fmt.usd(r.recoveredK)}</div><div class="hint" style="font-size:12px;color:var(--muted)">${fmt.usd(r.recycledK)} recycled into winners' next round, ${fmt.usd(r.distFromRedK)} distributed to LPs, ${fmt.usd(r.feesK)} in Keel fees</div></div>`;
+  h+=`<div class="stat stat-wide"><h3>Keel: recovered from failures</h3><div class="kpidef">Redeemed protected capital, split between recycling and an LP distribution.</div>
+    <div class="fhero"><div class="fherolabel">Total recovered</div><div class="fheroval">${fmt.usd(r.recoveredK)}</div></div>
+    <div class="ftiles">
+      <div class="ftile"><div class="flabel">Recycled into winners' next round</div><div class="fval">${fmt.usd(r.recycledK)}</div></div>
+      <div class="ftile"><div class="flabel">Distributed to LPs</div><div class="fval">${fmt.usd(r.distFromRedK)}</div></div>
+      <div class="ftile"><div class="flabel">Keel fees</div><div class="fval">${fmt.usd(r.feesK)}</div></div>
+    </div></div>`;
   $("stats").innerHTML=h;
 }
 function tabs(host,items,cur,onPick){
@@ -181,7 +187,7 @@ function renderFounder(){
   const cards=[
     ["Normal round",["SAFE only",[["Cash at close",p.checkT],["Dilution at this round's valuation",dil(p.checkT),"pct"],["Total capital received",p.checkT,null,true]]]],
     ["If the company succeeds",["SAFE + Keel",[["Cash at close",p.safeK],["Converts after "+p.dConv+" years",p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution, "+p.dConv+"y",p.yld*p.optK*p.dConv],["Converted round-wide (all investors)",p.totalOpt],["Yield earned round-wide, "+p.dConv+"y",p.yld*p.totalOpt*p.dConv],["Total capital received",p.safeK+p.optK,null,true]]]],
-    ["If the company fails",["SAFE + Keel",[["Cash at close",p.safeK],["Redeemed after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["This fund's yield contribution, "+p.dRed+"y",p.yld*p.optK*p.dRed],["Redeemed round-wide (all investors)",p.totalOpt*p.redRate],["Yield earned round-wide, "+p.dRed+"y",p.yld*p.totalOpt*p.dRed],["Total capital received",p.safeK+p.optK*keepConv,null,true]]]],
+    ["If the company fails",["SAFE + Keel",[["Cash at close",p.safeK],["Redeemed after "+p.dRed+" years (received by the fund)",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["This fund's yield contribution, "+p.dRed+"y",p.yld*p.optK*p.dRed],["Redeemed round-wide, "+p.dRed+"y (received by all investors)",p.totalOpt*p.redRate],["Yield earned round-wide, "+p.dRed+"y",p.yld*p.totalOpt*p.dRed],["Total capital received",p.safeK+p.optK*keepConv,null,true]]]],
     ["Across the whole round",["All protected investors",[["Round valuation (post-money)",p.roundVal],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],["Total convertible amount in the round",p.totalOpt,null,true]]]]];
   $("founder").innerHTML=cards.map(([t,[badge,rows]])=>{
     const hero=rows.find(r=>r[3]), rest=rows.filter(r=>!r[3]);
