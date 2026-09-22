@@ -17,20 +17,20 @@ A simulator for Keel (keel.sale), which licenses principal-protected financing i
 
 ## Model summary
 
-See `docs/model-spec.md` for detail.
+See `docs/model-spec.md` for detail. Mirrors `Keel_Fund_Model.xlsx` (Inputs + Fund Model tabs).
 
-- Year 0 = seed. Series A in year 3, when winners and failures are revealed.
-- Per company: $500K upfront SAFE + $250K of a $1M protected deposit, all converting at a $10M post-money cap (0% premium by default).
-- Outcomes: 80% fail ($0 at year 3), 18% "ok" (Series A $30M, exit $50M in year 6), 2% outliers (Series A $100M, exit $250M across years 5–8). 20% dilution per round, two rounds after the Series A.
-- Keel decisions: in year 2 the fund converts or redeems part of the protected position with a partial signal; in year 3 winners convert the rest and failures redeem the rest.
-- Keel fee: 2.5% a year on the fund's protected balance, paid by the fund. Deposit yield (6%) goes to the company.
-- Recovered capital is recycled into winners' Series A (capped at 20% of the fund); any excess is distributed.
-- Waterfall: European, no hurdle. Reserves sized to cover expected pro-rata exactly.
+- Two strategies: SAFE only (one unprotected check, `checkT`) vs SAFE + Option (`safeK` unprotected + `optK` protected, sized independently of `checkT`). No "waiting" strategy.
+- Years are 0-indexed and mean "years after the initial check" directly; the UI labels them 1–12 to match the workbook.
+- Five outcome buckets (failure, returns capital, solid, strong, outlier), each with its own share, multiple and exit year — not the old three-bucket ok/outlier/fail split.
+- Keel fee: tiered annual rate on the protected balance (`optK`) plus a one-off licence tiered on the whole SAFE + Option check, both from `src/config.js`'s pricing inputs.
+- Redeemed capital is split between recycling into winners' next Series A (capped at `recCap` of the fund) and a direct LP distribution; the rest is written off along with unredeemed failures' `optK`.
+- Waterfall: European, no hurdle.
+- No dilution/ownership/valuation-cap mechanics — outcomes pay a flat multiple on the check, matching the workbook.
 
 ## Ideas backlog
 
 - Scenario comparison: save two input sets and show them side by side.
 - Per-company Monte Carlo drill-down (show one simulated portfolio).
 - Shareable URLs that encode the inputs.
-- Syndication view: a lead writing unprotected with protected co-investors.
+- Syndication view: a lead writing unprotected with protected co-investors (see the workbook's Syndication tab).
 - Token-round mode (currently equity only).

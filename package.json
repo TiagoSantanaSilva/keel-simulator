@@ -2,7 +2,7 @@
   "name": "keel-simulator",
   "version": "0.1.0",
   "private": true,
-  "description": "Interactive simulator comparing a traditional seed fund, a Keel protected-position seed fund, and a fund that waits for the Series A.",
+  "description": "Interactive simulator comparing a SAFE-only seed fund with the same fund using Keel SAFE + Option protected positions.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,5 +14,8 @@
   "devDependencies": {
     "vite": "^5.4.0",
     "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
   }
 }

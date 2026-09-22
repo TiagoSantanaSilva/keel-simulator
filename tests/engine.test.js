@@ -1,64 +1,86 @@
 import { describe, it, expect } from "vitest";
 import { DEF } from "../src/config.js";
-import { run, monte, irr, grid } from "../src/engine.js";
+import { run, monte, irr, grid, YR } from "../src/engine.js";
 
-// Baseline values from the Excel model (Keel_Seed_Fund_Model.xlsx) for the default inputs.
+// Baseline values from Keel_Fund_Model.xlsx (Fund Model tab) for the default inputs.
 // If a change moves these numbers on purpose, update them here and say why in the commit.
 describe("deterministic engine, default inputs", () => {
   const r = run(DEF);
 
   it("matches the spreadsheet's net TVPI", () => {
-    expect(r.T.TVPI).toBeCloseTo(0.624, 3);
-    expect(r.K.TVPI).toBeCloseTo(0.811, 3);
-    expect(r.W.TVPI).toBeCloseTo(0.896, 3);
+    expect(r.T.TVPI).toBeCloseTo(1.8128, 3);
+    expect(r.K.TVPI).toBeCloseTo(2.22416, 3);
   });
 
   it("matches the spreadsheet's net IRR", () => {
-    expect(r.T.irr).toBeCloseTo(-0.0955, 3);
-    expect(r.K.irr).toBeCloseTo(-0.0423, 3);
-    expect(r.W.irr).toBeCloseTo(-0.0394, 3);
+    expect(r.T.irr).toBeCloseTo(0.1036283447, 3);
+    expect(r.K.irr).toBeCloseTo(0.1477445992, 3);
   });
 
-  it("matches the spreadsheet's gross MOIC", () => {
-    expect(r.T.MOIC).toBeCloseTo(0.78, 2);
-    expect(r.K.MOIC).toBeCloseTo(0.855, 2);
-    expect(r.W.MOIC).toBeCloseTo(1.12, 2);
+  it("matches the spreadsheet's gross multiple", () => {
+    expect(r.grossMultipleT).toBeCloseTo(2.016, 2);
+    expect(r.grossMultipleK).toBeCloseTo(2.5302, 2);
+  });
+
+  it("matches the spreadsheet's DPI at year 4 and year 6", () => {
+    expect(r.K.dpi[3]).toBeCloseTo(0.2113636364, 3);
+    expect(r.K.dpi[5]).toBeCloseTo(0.202173913, 3);
+  });
+
+  it("matches the spreadsheet's fees, recoveries and write-offs", () => {
+    expect(r.feesK).toBeCloseTo(2030000, -1);
+    expect(r.recoveredK).toBeCloseTo(16800000, -1);
+    expect(r.recycledK).toBeCloseTo(7500000, -1);
+    expect(r.distFromRedK).toBeCloseTo(9300000, -1);
+    expect(r.writeOffT).toBeCloseTo(22400000, -1);
+    expect(r.writeOffK).toBeCloseTo(7630000, -1);
   });
 
   it("calls exactly the fund size from LPs in every strategy", () => {
-    for (const k of ["T", "K", "W"]) expect(r[k].cpaid.at(-1)).toBeCloseTo(DEF.F, 0);
+    for (const k of ["T", "K"]) expect(r[k].cpaid.at(-1)).toBeCloseTo(DEF.F, 0);
   });
 
   it("realises every position by the final year", () => {
-    for (const k of ["T", "K", "W"]) {
+    for (const k of ["T", "K"]) {
       expect(Math.abs(r[k].nav.at(-1))).toBeLessThan(1);
       expect(r[k].rvpi.at(-1)).toBeCloseTo(0, 6);
+      expect(r[k].tvpi.at(-1)).toBeCloseTo(r[k].dpi.at(-1), 6);
     }
   });
 
   it("keeps TVPI = DPI + RVPI every year", () => {
-    for (const k of ["T", "K", "W"])
+    for (const k of ["T", "K"])
       r[k].tvpi.forEach((v, i) => expect(v).toBeCloseTo(r[k].dpi[i] + r[k].rvpi[i], 9));
   });
 
-  it("recovers the protected capital from failures", () => {
-    expect(r.recK).toBeCloseTo(8_206_297, -1);
+  it("has 12 years, labelled 1 to 12", () => {
+    expect(YR).toEqual([1,2,3,4,5,6,7,8,9,10,11,12]);
   });
 });
 
 describe("model invariants", () => {
-  it("Keel equals traditional when nothing is protected and there are no fees", () => {
-    const p = { ...DEF, U: DEF.U + DEF.P, P: 0, kfee: 0 };
+  it("Keel equals SAFE only when the whole check is unprotected and there are no fees", () => {
+    const p = { ...DEF, safeK: DEF.safeK + DEF.optK, optK: 0, checkT: DEF.safeK + DEF.optK, minFee: 0, lic1: 0, lic2: 0, lic3: 0 };
     const r = run(p);
-    expect(r.K.TVPI).toBeCloseTo(r.T.TVPI, 9);
+    expect(r.K.TVPI).toBeCloseTo(r.T.TVPI, 6);
   });
 
-  it("a valuation premium lowers Keel's return, all else equal", () => {
-    expect(run({ ...DEF, prem: 0.15 }).K.TVPI).toBeLessThan(run(DEF).K.TVPI);
+  it("a valuation premium lowers the Option strategy's return, all else equal", () => {
+    expect(run({ ...DEF, premium: 0.15 }).K.TVPI).toBeLessThan(run(DEF).K.TVPI);
   });
 
-  it("recovers more when more failures are redeemed early", () => {
-    expect(run({ ...DEF, c2f: 0 }).recK).toBeGreaterThan(run(DEF).recK);
+  it("recovers more capital when more failures are redeemed", () => {
+    expect(run({ ...DEF, redRate: 0.9 }).recoveredK).toBeGreaterThan(run(DEF).recoveredK);
+  });
+
+  it("recycled capital is capped at the recycling cap (% of fund size)", () => {
+    const r = run({ ...DEF, redRate: 1, recShare: 1, recCap: 0.01 });
+    expect(r.recycledK).toBeCloseTo(DEF.F * 0.01, -1);
+  });
+
+  it("Keel fees never push the fund's total paid-in above what the fee formula implies", () => {
+    const r = run(DEF);
+    expect(r.feesK).toBeCloseTo(r.d.totalFees, -1);
   });
 });
 
@@ -80,13 +102,20 @@ describe("Monte Carlo", () => {
     const mc = monte(DEF, 3000), r = run(DEF);
     expect(mc.T.mean).toBeCloseTo(r.T.TVPI, 1);
     expect(mc.K.mean).toBeCloseTo(r.K.TVPI, 1);
+    expect(mc.T.irrMean).toBeCloseTo(r.T.irr, 1);
+    expect(mc.K.irrMean).toBeCloseTo(r.K.irr, 1);
+  });
+  it("runs fast enough to stay interactive", () => {
+    const t0 = Date.now();
+    monte(DEF, 2000);
+    expect(Date.now() - t0).toBeLessThan(2000);
   });
 });
 
 describe("exit-size grid", () => {
-  it("has 6 rows and 5 columns", () => {
+  it("has 5 rows and 6 columns", () => {
     const g = grid(DEF);
-    expect(g.length).toBe(6);
-    g.forEach(row => expect(row.length).toBe(5));
+    expect(g.length).toBe(5);
+    g.forEach(row => expect(row.length).toBe(6));
   });
 });

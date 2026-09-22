@@ -1,6 +1,6 @@
 :root{
   --bg:#F3F7F8; --surface:#FFFFFF; --sunk:#E9EFF2; --ink:#0E2A3B; --muted:#5A6B78; --line:#D3DDE3;
-  --trad:#7F8D9B; --keel:#0A7A74; --wait:#C07F12; --neg:#B4443A; --pos:#2C7A4B; --water:#2F6F9F;
+  --trad:#7F8D9B; --keel:#0A7A74; --neg:#B4443A; --pos:#2C7A4B; --water:#2F6F9F;
   --focus:#1F6FEB;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
@@ -8,12 +8,12 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#0B1822; --surface:#11232F; --sunk:#0E1E29; --ink:#E4EDF1; --muted:#96ABB9; --line:#24404F;
-    --trad:#98A6B3; --keel:#34B5AC; --wait:#E3A443; --neg:#E07A70; --pos:#5CC08A; --water:#5FA3D6; --focus:#6AA8FF;
+    --trad:#98A6B3; --keel:#34B5AC; --neg:#E07A70; --pos:#5CC08A; --water:#5FA3D6; --focus:#6AA8FF;
   }
 }
 :root[data-theme="dark"]{
   --bg:#0B1822; --surface:#11232F; --sunk:#0E1E29; --ink:#E4EDF1; --muted:#96ABB9; --line:#24404F;
-  --trad:#98A6B3; --keel:#34B5AC; --wait:#E3A443; --neg:#E07A70; --pos:#5CC08A; --water:#5FA3D6; --focus:#6AA8FF;
+  --trad:#98A6B3; --keel:#34B5AC; --neg:#E07A70; --pos:#5CC08A; --water:#5FA3D6; --focus:#6AA8FF;
 }
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -69,12 +69,13 @@ section{margin-top:44px}
 
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0;margin-top:18px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
 .stat{padding:12px 14px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
-.stat h3{margin:0 0 6px;font-size:13px;font-weight:600;color:var(--muted)}
-.stat .trio{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;font-size:14px}
+.stat h3{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--muted)}
+.kpidef{font-size:11.5px;color:var(--muted);margin:0 0 8px;line-height:1.35}
+.stat .trio{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;font-size:14px}
 .stat .trio div{display:flex;flex-direction:column}
 .stat .trio i{font-style:normal;font-size:11px;color:var(--muted)}
 .stat .trio b{font-weight:700;white-space:nowrap}
-.k{color:var(--keel)} .t{color:var(--trad)} .w{color:var(--wait)}
+.k{color:var(--keel)} .t{color:var(--trad)}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px}
 
 /* charts */
@@ -117,5 +118,6 @@ table.cf tr.em td{font-weight:700}
 .btn.ghost{background:transparent;color:var(--ink)}
 .note{font-size:13px;color:var(--muted);max-width:72ch}
 .status{font-size:13px;color:var(--muted);margin-top:6px;min-height:1.2em}
-textarea.csv{width:100%;height:160px;margin-top:10px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:var(--sunk);padding:8px;display:none}
+.cfirr{font-size:14px;color:var(--muted);margin:2px 0 10px}
+.cfirr b{color:var(--ink)}
 @media (prefers-reduced-motion:reduce){.bar{transition:none}}

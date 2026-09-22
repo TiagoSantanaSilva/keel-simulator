@@ -1,53 +1,97 @@
 # Model specification
 
-All amounts are expected values across the portfolio, so company counts can be fractional. The Monte Carlo section is the exception: it draws whole companies at random.
+Mirrors `Keel_Fund_Model.xlsx` (Inputs + Fund Model tabs). All amounts are expected values
+across the portfolio, so position counts can be fractional. The Monte Carlo section is the
+exception: it draws whole positions at random.
+
+Two strategies are compared, both funded from the same fund and the same outcome distribution:
+
+- **SAFE only:** every position is a single unprotected SAFE (`checkT`).
+- **SAFE + Option:** every position splits into an unprotected SAFE (`safeK`) plus a Keel
+  Option (`optK`). The Option redeems if the company fails (subject to the redemption rate)
+  and converts, at a possible valuation premium, if it succeeds.
 
 ## Timeline
 
-- **Year 0:** seed checks. Management fees are charged in years 0–9.
-- **Year 2:** first Keel decision, before anyone knows which companies will win.
-- **Year 3:** Series A. Winners raise; failures are written off. Remaining Keel positions convert (winners) or are redeemed (failures). Pro-rata and recycled capital are invested.
-- **Years 5–8:** exits.
+Years are 0-indexed and mean "years after the initial check" directly: an input like `foYear`
+or `ex1` names the array index at which it fires. The UI labels them 1 to 12, matching the
+workbook's own year numbering (its "year 1" is the year of the initial checks).
+
+- **Year 1:** initial checks. Management fees are charged for `MFY` years starting here.
+- **Years 2 to `dConv`+1:** Keel charges its annual fee on positions still protected and
+  awaiting a conversion decision.
+- **Years 2 to `dRed`+1:** Keel charges its annual fee on positions still protected and
+  awaiting a redemption decision. At year `dRed`+1, failed positions are redeemed (a share
+  `redRate` of them) or written off (the rest).
+- **Year `foYear`+1:** the follow-on reserve is deployed (net of Keel fees, for SAFE + Option).
+- **Years `ex1`+1 to `ex4`+1:** each outcome bucket (returns capital, solid, strong, outlier)
+  exits in its own year and pays out its multiple on the whole check.
+- **Year `foExit`+1:** the follow-on reserve exits at `foMult`.
+- **Year `recExit`+1:** capital recycled from redemptions into winners' next Series A exits at
+  `recMult`.
 
 ## Derived values (`derive`)
 
 | Symbol | Meaning | Formula |
 |---|---|---|
-| I | Investable capital | F × (1 − fee × fee years) |
-| Chk | Fund's seed check per company | U + P |
-| own | Ownership after seed | Chk / V |
-| mS | Seed multiple after dilution | Exit / V × (1 − dil)^(1 + later rounds) |
-| mA | Series A multiple after dilution | Exit / Series A price × (1 − dil)^(later rounds) |
-| mk | Seed stake marked at the Series A | (1 − dil) × Series A price / V |
-| PR | Pro-rata per winner | own × dil × Series A price |
-| Rpc | Expected pro-rata per company | pOk × PRok + pOut × PRout |
-| bal3 | Share of P still protected in year 3 | pF(1 − c2f − r2f) + pW(1 − c2w − r2w) |
-| Fpc | Keel fees per company | kfee × P × (2 + bal3) |
-| NT, NK | Companies backed | I / (Chk + Rpc) and I / (Chk + Rpc + Fpc) |
-| R | Capital recovered | redemptions in years 2 and 3 |
-| Rec | Recycled into winners | min(R × recycle share, cap × F) |
+| I | Investable capital | F × (1 − MF × MFY) |
+| checkPool | Capital for initial checks | I × (1 − reserve) |
+| foReserve | Follow-on reserve | I × reserve |
+| checkK | SAFE + Option check size | safeK + optK |
+| NT, NK | Positions backed | checkPool / checkT, checkPool / checkK |
+| feePerPos | Keel's annual fee per position | tiered rate on `optK` (the protected balance), floored at `minFee` |
+| licence | Keel's one-off licence fee | tiered on `checkK` (first-commitment tiers) |
+| totalFees | Total Keel fees | licence + convertedK × feePerPos × dConv + redeemedK × feePerPos × dRed |
+| recovered | Capital recovered via redemption | redeemedK × optK × (1 + yld × yldInv × dRed) |
+| recycled | Recycled into winners' next Series A | min(recovered × recShare, F × recCap) |
 
-A valuation premium divides Keel's ownership, seed multiples, marks and pro-rata by (1 + premium).
+`convertedK` is every position that is *not* redeemed (successes plus unredeemed failures) —
+it keeps accruing the Keel fee until the conversion decision at year `dConv`.
 
 ## Strategies
 
-- **Traditional:** NT seed checks of Chk, pro-rata in winners at year 3.
-- **Keel:** NK seed checks (same Chk, part protected). Winners keep U + P(1 − r2w) of stake. Failures lose U + P × c2f. Recovered capital recycled into winners' Series A, split between outliers and "ok" companies by `recOut`.
-- **Waiting:** invests I × allocation at the Series A in the same mix of winners (by count); unplaced capital is returned at year 3.
+- **SAFE only:** NT checks of `checkT`. Failures return nothing. The follow-on reserve exits
+  at `foMult`.
+- **SAFE + Option:** NK checks split `safeK` / `optK`. A failure loses `safeK` outright; the
+  `optK` share is redeemed (`redRate`) or lost. A success converts the *whole* check
+  (`safeK` + `optK`) at the round's terms, discounted by `premium`. Capital recovered from
+  redemptions is split between recycling into winners' next Series A (up to `recCap` of the
+  fund) and a direct distribution to LPs. Keel fees come out of the follow-on reserve before
+  it's deployed.
 
 ## Marks (NAV)
 
-Positions are held at cost until year 3, then marked at the Series A price and moved in a straight line to exit value. Failures are zero from year 3.
+The workbook itself tracks only realised cash (DPI over time; TVPI is the final DPI once
+everything has exited). This app additionally marks unrealised positions for the RVPI/TVPI
+chart, using the simplest defensible convention given the workbook has no interim marks:
+
+- A position destined to succeed is held at cost from year 1 until its exit year, then it's
+  realised (removed from NAV, added to distributions).
+- A position destined to fail is written off immediately — no interim value, since the
+  outcome distribution is known upfront in this expected-value model. A redeemed failure is
+  the exception: it's held at cost (`optK`) until the redemption year, since that capital is
+  genuinely recovered as cash then.
+- The follow-on reserve and recycled capital are held at cost from their deployment year to
+  their exit year.
+
+This choice only feeds the RVPI/TVPI-over-time chart. It never affects DPI or IRR, which come
+purely from the cash-flow rows below, matching the workbook exactly.
 
 ## Metrics
 
-- **DPI** = cumulative LP distributions / cumulative paid-in.
-- **RVPI** = (LP total value − LP distributions) / paid-in.
-- **TVPI** = DPI + RVPI, net of carry.
-- **Gross MOIC** = (distributions + NAV) / capital invested in companies (before fees and carry).
-- **Net IRR** on yearly LP cash flows; the solver returns the root closest to zero.
-- **Waterfall:** LPs receive all commitments first, then (1 − carry) of the rest.
+- **DPI** = cumulative LP distributions (after carry) / cumulative paid-in.
+- **RVPI** = (LP total value at cost − LP distributions) / paid-in, from the NAV convention above.
+- **TVPI** = DPI + RVPI, net of carry. Equals DPI once every position has exited.
+- **Gross multiple** = total proceeds (before fees and carry) / fund size.
+- **Net IRR** on yearly LP cash flows (contributions negative, distributions positive); the
+  solver returns the root closest to zero.
+- **Waterfall:** European, no hurdle. LPs receive all commitments first, then (1 − carry) of
+  the rest.
 
 ## Monte Carlo (`monte`)
 
-Each run draws every company's outcome independently. Pro-rata is capped by the reserve actually available (unused reserve is returned). Recycled capital goes to winners that exist in that run. The waiting fund makes Series A investments of size Chk, each an outlier with probability pOut / pW. Seeded RNG, so results are reproducible.
+Each run draws every position's outcome independently from the same shares (`sh0`..`sh4`).
+Redemption, fees and recycling are applied to the random failure count using the same
+formulas as the deterministic model. Cash-flow timing is unchanged across runs (only the
+dollar amounts vary), so each run gets its own net IRR, not just a TVPI. Seeded RNG, so
+results are reproducible.

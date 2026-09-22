@@ -1,7 +1,8 @@
 import "./styles.css";
+import * as XLSX from "xlsx";
 import { G, DEF, PRESETS } from "./config.js";
 import { fmt } from "./format.js";
-import { YR, YA, run, monte, OKS, OUTS, grid } from "./engine.js";
+import { YR, run, monte, STRONG_MULTS, OUTLIER_MULTS, grid } from "./engine.js";
 
 let S = Object.assign({}, DEF);
 let preset = "Your base case";
@@ -38,15 +39,15 @@ function buildPresets(){
 function markPreset(n){preset=n;[...$("presets").children].forEach(b=>b.setAttribute("aria-pressed",String(b.textContent===n)))}
 
 /* ---------------- rendering ---------------- */
-const COL={T:"var(--trad)",K:"var(--keel)",W:"var(--wait)"}, NAME={T:"Traditional",K:"Keel",W:"Waiting"};
+const COL={T:"var(--trad)",K:"var(--keel)"}, NAME={T:"SAFE only",K:"SAFE + Option"};
 let chartKey="tvpi", heatKey="best", cfKey="K", last=null, lastMC=null, lastGrid=null;
 
 function renderHull(r){
-  const vals=[r.T.TVPI,r.K.TVPI,r.W.TVPI], max=Math.max(1.5,...vals)*1.12;
+  const vals=[r.T.TVPI,r.K.TVPI], max=Math.max(1.5,...vals)*1.12;
   const pos=v=>Math.max(0,Math.min(100,v/max*100));
-  const sub={T:"$"+Math.round((r.p.U+r.p.P)/1e3)+"K at seed",K:"$"+Math.round(r.p.U/1e3)+"K + $"+Math.round(r.p.P/1e3)+"K protected",W:"Series A only"};
+  const sub={T:fmt.usd(S.checkT)+" check",K:fmt.usd(S.safeK)+" SAFE + "+fmt.usd(S.optK)+" Option"};
   let h="";
-  ["T","K","W"].forEach(k=>{const v=r[k].TVPI;
+  ["T","K"].forEach(k=>{const v=r[k].TVPI;
     h+=`<div class="row"><div class="name">${NAME[k]}<small>${sub[k]}</small></div>
       <div class="track" role="img" aria-label="${NAME[k]} net TVPI ${v.toFixed(2)}x"><div class="bar" style="width:${pos(v)}%;background:${COL[k]}"></div><div class="waterline" style="left:${pos(1)}%"></div></div>
       <div class="val" style="color:${COL[k]}">${v.toFixed(2)}x</div></div>`});
@@ -55,18 +56,18 @@ function renderHull(r){
   $("hull").innerHTML=h;
   $("headline").textContent=`What a ${fmt.usd(r.p.F)} seed fund returns to its LPs`;
 }
-function trio(r,fn,f){return `<div class="trio">${["T","K","W"].map(k=>`<div><i>${NAME[k]}</i><b class="${k.toLowerCase()}">${f(fn(r[k],k))}</b></div>`).join("")}</div>`}
+function trio(r,fn,f){return `<div class="trio">${["T","K"].map(k=>`<div><i>${NAME[k]}</i><b class="${k.toLowerCase()}">${f(fn(r[k],k))}</b></div>`).join("")}</div>`}
 function renderStats(r){
   const s=[
-    ["Net IRR",o=>o.irr,v=>isNaN(v)?"n/a":(v*100).toFixed(1)+"%"],
-    ["Gross MOIC",o=>o.MOIC,fmt.x],
-    ["DPI / RVPI at year 3",o=>o,o=>o.dpi[3].toFixed(2)+" / "+o.rvpi[3].toFixed(2)],
-    ["DPI / RVPI at year 6",o=>o,o=>o.dpi[6].toFixed(2)+" / "+o.rvpi[6].toFixed(2)],
-    ["Capital lost in failures",(o,k)=>k==="T"?r.lossT:k==="K"?r.lossK:0,fmt.usd],
-    ["Seed companies backed",(o,k)=>k==="T"?r.d.NT:k==="K"?r.d.NK:NaN,v=>isNaN(v)?"n/a":v.toFixed(1)],
+    ["Net IRR","Annualised return to LPs, after fees and carry.",o=>o.irr,v=>isNaN(v)?"n/a":(v*100).toFixed(1)+"%"],
+    ["Gross multiple","Total proceeds before fees and carry, divided by fund size.",(o,k)=>k==="T"?r.grossMultipleT:r.grossMultipleK,fmt.x],
+    ["DPI / RVPI at year 4","Cash already distributed vs. unrealised value, per dollar paid in.",o=>o,o=>o.dpi[3].toFixed(2)+" / "+o.rvpi[3].toFixed(2)],
+    ["DPI / RVPI at year 6","Same, four years further into the fund's life.",o=>o,o=>o.dpi[5].toFixed(2)+" / "+o.rvpi[5].toFixed(2)],
+    ["Capital lost in failures","Principal not recovered when a company fails (Keel: after fees).",(o,k)=>k==="T"?r.writeOffT:r.writeOffK,fmt.usd],
+    ["Seed positions backed","Expected number of companies funded from the initial check pool.",(o,k)=>k==="T"?r.d.NT:r.d.NK,v=>v.toFixed(1)],
   ];
-  let h=s.map(([t,fn,f])=>`<div class="stat"><h3>${t}</h3>${trio(r,fn,f)}</div>`).join("");
-  h+=`<div class="stat"><h3>Keel: recovered from failures</h3><div style="font-size:18px;font-weight:700" class="k">${fmt.usd(r.recK)}</div><div class="hint" style="font-size:12px;color:var(--muted)">${fmt.usd(r.d.Rec)} recycled, ${fmt.usd(r.d.DistR)} paid out, ${fmt.usd(r.d.KF)} in fees</div></div>`;
+  let h=s.map(([t,def,fn,f])=>`<div class="stat"><h3>${t}</h3><div class="kpidef">${def}</div>${trio(r,fn,f)}</div>`).join("");
+  h+=`<div class="stat"><h3>Keel: recovered from failures</h3><div class="kpidef">Redeemed protected capital, split between recycling and LP distributions.</div><div style="font-size:18px;font-weight:700" class="k">${fmt.usd(r.recoveredK)}</div><div class="hint" style="font-size:12px;color:var(--muted)">${fmt.usd(r.recycledK)} recycled into winners' next Series A, ${fmt.usd(r.distFromRedK)} paid out, ${fmt.usd(r.feesK)} in Keel fees</div></div>`;
   $("stats").innerHTML=h;
 }
 function tabs(host,items,cur,onPick){
@@ -99,83 +100,100 @@ function renderChart(r){
   const opts=[["tvpi","TVPI"],["dpi","DPI"],["rvpi","RVPI"],["moic","Gross MOIC"],["cnet","J-curve"]];
   tabs("chartTabs",opts,chartKey,k=>{chartKey=k;renderChart(last)});
   const money=chartKey==="cnet";
-  lineChart("chart",["T","K","W"].map(k=>({n:NAME[k],c:COL[k],v:r[k][chartKey]})),(v,full)=>money?(full?fmt.usdFull(v):fmt.usd(v)):v.toFixed(2)+"x",money?0:1);
+  lineChart("chart",["T","K"].map(k=>({n:NAME[k],c:COL[k],v:r[k][chartKey]})),(v,full)=>money?(full?fmt.usdFull(v):fmt.usd(v)):v.toFixed(2)+"x",money?0:1);
 }
 function renderHist(mc){
   const W=760,H=240,m={l:40,r:14,t:10,b:30};
-  const all=[...mc.T.arr,...mc.K.arr,...mc.W.arr], lo=0, hi=Math.max(2,Math.min(8,[...all].sort((a,b)=>a-b)[Math.floor(all.length*.99)]*1.05));
+  const all=[...mc.T.arr,...mc.K.arr], lo=0, hi=Math.max(2,Math.min(8,[...all].sort((a,b)=>a-b)[Math.floor(all.length*.99)]*1.05));
   const bins=40, bw=(hi-lo)/bins;
   const hist=a=>{const h=new Array(bins).fill(0);a.forEach(v=>{const i=Math.min(bins-1,Math.max(0,Math.floor((v-lo)/bw)));h[i]++});return h.map(c=>c/a.length)};
-  const H3={T:hist(mc.T.arr),K:hist(mc.K.arr),W:hist(mc.W.arr)}, ymax=Math.max(...H3.T,...H3.K,...H3.W)*1.1;
+  const H2={T:hist(mc.T.arr),K:hist(mc.K.arr)}, ymax=Math.max(...H2.T,...H2.K)*1.1;
   const x=v=>m.l+(v-lo)*(W-m.l-m.r)/(hi-lo), y=v=>m.t+(ymax-v)*(H-m.t-m.b)/ymax;
   let g=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line)"/>`;
   for(let v=0;v<=hi+1e-9;v+=hi>4?1:.5) g+=`<text x="${x(v)}" y="${H-10}" text-anchor="middle">${v}x</text>`;
   g+=`<line x1="${x(1)}" x2="${x(1)}" y1="${m.t}" y2="${y(0)}" stroke="var(--water)" stroke-dasharray="5 4" stroke-width="1.5"/><text x="${x(1)+6}" y="${m.t+12}" style="fill:var(--water)">money back</text>`;
-  ["T","W","K"].forEach(k=>{let d=`M${x(lo)},${y(0)}`;H3[k].forEach((c,i)=>{d+=` L${x(lo+i*bw)},${y(c)} L${x(lo+(i+1)*bw)},${y(c)}`});d+=` L${x(hi)},${y(0)}`;
+  ["T","K"].forEach(k=>{let d=`M${x(lo)},${y(0)}`;H2[k].forEach((c,i)=>{d+=` L${x(lo+i*bw)},${y(c)} L${x(lo+(i+1)*bw)},${y(c)}`});d+=` L${x(hi)},${y(0)}`;
     g+=`<path d="${d}" fill="${COL[k]}" fill-opacity="${k==='K'?.22:.1}" stroke="${COL[k]}" stroke-width="2"/>`});
   $("hist").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Distribution of net TVPI across simulated funds">${g}</svg>`;
-  $("mcstats").innerHTML=["T","K","W"].map(k=>{const s=mc[k];return `<div class="mc"><h3 class="${k.toLowerCase()}">${NAME[k]}</h3><dl>
+  $("mcstats").innerHTML=["T","K"].map(k=>{const s=mc[k];return `<div class="mc"><h3 class="${k.toLowerCase()}">${NAME[k]}</h3><dl>
     <dt>Chance LPs lose money</dt><dd>${(s.loss*100).toFixed(1)}%</dd><dt>Worst 10% of funds</dt><dd>${s.p10.toFixed(2)}x</dd>
-    <dt>Median fund</dt><dd>${s.p50.toFixed(2)}x</dd><dt>Best 10% of funds</dt><dd>${s.p90.toFixed(2)}x</dd><dt>Average</dt><dd>${s.mean.toFixed(2)}x</dd></dl></div>`}).join("");
+    <dt>Median fund</dt><dd>${s.p50.toFixed(2)}x</dd><dt>Best 10% of funds</dt><dd>${s.p90.toFixed(2)}x</dd><dt>Average</dt><dd>${s.mean.toFixed(2)}x</dd>
+    <dt>Average net IRR</dt><dd>${isNaN(s.irrMean)?"n/a":(s.irrMean*100).toFixed(1)+"%"}</dd></dl></div>`}).join("");
 }
 function renderHeat(g){
-  tabs("heatTabs",[["best","Best strategy"],["kt","Keel vs traditional"],["kw","Keel vs waiting"]],heatKey,k=>{heatKey=k;renderHeat(lastGrid)});
-  let h=`<table><thead><tr><th>'Ok' exit \\ outlier exit</th>${OUTS.map(v=>`<th>${fmt.usd(v)}</th>`).join("")}</tr></thead><tbody>`;
-  g.forEach((row,i)=>{h+=`<tr><th>${fmt.usd(OKS[i])}</th>`;row.forEach((c,j)=>{
-    const cur=OKS[i]===S.EOk&&OUTS[j]===S.EOut?" cur":"";
-    if(heatKey==="best"){const best=c.K>=c.T&&c.K>=c.W?"K":(c.T>=c.W?"T":"W");
+  tabs("heatTabs",[["best","Best strategy"],["kt","SAFE + Option vs SAFE only"]],heatKey,k=>{heatKey=k;renderHeat(lastGrid)});
+  let h=`<table><thead><tr><th>'Strong' multiple \\ outlier multiple</th>${OUTLIER_MULTS.map(v=>`<th>${v}x</th>`).join("")}</tr></thead><tbody>`;
+  g.forEach((row,i)=>{h+=`<tr><th>${STRONG_MULTS[i]}x</th>`;row.forEach((c,j)=>{
+    const cur=STRONG_MULTS[i]===S.mul3&&OUTLIER_MULTS[j]===S.mul4?" cur":"";
+    if(heatKey==="best"){const best=c.K>=c.T?"K":"T";
       h+=`<td class="${cur.trim()}" style="background:color-mix(in srgb, ${COL[best]} 28%, var(--surface))">${NAME[best]}<br><span style="font-weight:400;font-size:12px">${c[best].toFixed(2)}x</span></td>`}
-    else{const v=heatKey==="kt"?c.K-c.T:c.K-c.W, a=Math.min(1,Math.abs(v)/.4), col=v>=0?"var(--pos)":"var(--neg)";
+    else{const v=c.K-c.T, a=Math.min(1,Math.abs(v)/.4), col=v>=0?"var(--pos)":"var(--neg)";
       h+=`<td class="${cur.trim()}" style="background:color-mix(in srgb, ${col} ${Math.round(a*45)}%, var(--surface))">${fmt.dx(v)}</td>`}
   });h+="</tr>"});
   $("heat").innerHTML=h+"</tbody></table>";
 }
 function renderFounder(){
-  const p=S, keepW=1-p.c2w-p.r2w, keepF=1-p.c2f-p.r2f;
+  const p=S, keepConv=1-p.redRate;
   const cards=[
-    ["Normal round",[["Cash at close",p.U+p.D],["Protected deposit",0],["Total capital received",p.U+p.D],["Yield received",0],["Seed dilution",(p.U+p.D)/p.V,"pct"]]],
-    ["Keel round, company succeeds",[["Cash at close",p.U],["Converted in year 2",p.D*p.c2w],["Converted in year 3",p.D*keepW],["Total capital received",p.U+p.D*(1-p.r2w)],["Yield received, years 1 to 3",p.yld*p.D*(2+keepW)],["Seed dilution",(p.U+p.D*(1-p.r2w))/(p.V*(1+p.prem)),"pct"]]],
-    ["Keel round, company fails",[["Cash at close",p.U],["Converted before failing",p.D*p.c2f],["Taken back by investors",p.D*(1-p.c2f)],["Total capital received",p.U+p.D*p.c2f],["Yield received, years 1 to 3",p.yld*p.D*(2+keepF)],["Seed dilution",(p.U+p.D*p.c2f)/(p.V*(1+p.prem)),"pct"]]]];
-  $("founder").innerHTML=cards.map(([t,rows])=>`<div class="founder"><h3 style="margin:0 0 10px;font-size:15px">${t}</h3><dl>${rows.map(([a,v,f])=>`<dt>${a}</dt><dd>${f==="pct"?fmt.pct1(v):fmt.usdFull(v)}</dd>`).join("")}</dl></div>`).join("");
+    ["Normal round (SAFE only)",[["Cash at close",p.checkT],["Total capital received",p.checkT]]],
+    ["SAFE + Option round, company succeeds",[["Cash at close",p.safeK],["Option converts after "+p.dConv+" years",p.optK],["Total capital received",p.safeK+p.optK],["Yield received over "+p.dConv+" years",p.yld*p.optK*p.dConv*(1-p.yldInv)]]],
+    ["SAFE + Option round, company fails",[["Cash at close",p.safeK],["Redeemed by investors after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["Total capital received",p.safeK+p.optK*keepConv],["Yield received over "+p.dRed+" years",p.yld*p.optK*p.dRed*(1-p.yldInv)]]]];
+  $("founder").innerHTML=cards.map(([t,rows])=>`<div class="founder"><h3 style="margin:0 0 10px;font-size:15px">${t}</h3><dl>${rows.map(([a,v])=>`<dt>${a}</dt><dd>${fmt.usdFull(v)}</dd>`).join("")}</dl></div>`).join("");
 }
 function cfRows(o){
   const rows=[];Object.entries(o.rows).forEach(([k,v])=>rows.push([k,v,"usd"]));
   rows.push(["Total paid-in",o.paid,"usd",1],["Gross distributions",o.dist,"usd",1],["Unrealised value (NAV)",o.nav,"usd"],["Distributions to LPs (after carry)",o.lpd,"usd"],
-    ["LP net cash flow",o.net,"usd",1],["Cumulative LP cash flow",o.cnet,"usd"],["DPI",o.dpi,"x",1],["RVPI",o.rvpi,"x",1],["TVPI",o.tvpi,"x",1],["Gross MOIC",o.moic,"x"]);
+    ["LP net cash flow",o.net,"usd",1],["Cumulative LP net cash flow",o.cnet,"usd"],["DPI",o.dpi,"x",1],["RVPI",o.rvpi,"x",1],["TVPI",o.tvpi,"x",1],["Gross MOIC",o.moic,"x"]);
   return rows;
 }
 function renderCF(r){
-  tabs("cfTabs",[["T","Traditional"],["K","Keel"],["W","Waiting"]],cfKey,k=>{cfKey=k;renderCF(last)});
-  const rows=cfRows(r[cfKey]);
+  tabs("cfTabs",[["T","SAFE only"],["K","SAFE + Option"]],cfKey,k=>{cfKey=k;renderCF(last)});
+  const o=r[cfKey], rows=cfRows(o);
+  $("cfirr").innerHTML=`Net IRR: <b>${isNaN(o.irr)?"n/a":(o.irr*100).toFixed(1)+"%"}</b> &middot; Net TVPI: <b>${o.TVPI.toFixed(2)}x</b>`;
   $("cf").innerHTML=`<thead><tr><th>${NAME[cfKey]}</th>${YR.map(t=>`<th>Year ${t}</th>`).join("")}</tr></thead><tbody>`+
     rows.map(([l,v,f,em])=>`<tr class="${em?'em':''}"><td>${l}</td>${v.map(x=>`<td>${f==="x"?x.toFixed(2)+"x":(Math.abs(x)<0.5?"-":fmt.usdFull(x))}</td>`).join("")}</tr>`).join("")+"</tbody>";
 }
 function warnings(){
-  const w=[]; if(S.pOk+S.pOut>1) w.push("'Ok' plus outlier shares exceed 100%.");
-  if(S.c2w+S.r2w>1) w.push("Year 2 actions in winners exceed 100%.");
-  if(S.c2f+S.r2f>1) w.push("Year 2 actions in failures exceed 100%.");
-  if(S.YOk<=YA||Math.min(S.yO1,S.yO2)<=YA) w.push("Exit years must come after the Series A in year 3.");
+  const w=[]; const shareSum=S.sh0+S.sh1+S.sh2+S.sh3+S.sh4;
+  if(Math.abs(shareSum-1)>0.001) w.push(`Outcome shares sum to ${(shareSum*100).toFixed(0)}%, not 100%.`);
+  if(S.foExit<=S.foYear) w.push("Follow-ons must exit after they're deployed.");
+  if(S.recExit<=S.dRed) w.push("Recycled capital must exit after the redemption year.");
   $("warn").textContent=w.join(" ");
   return w.length===0;
 }
 
-/* ---------------- CSV ---------------- */
-function csv(){
-  const r=last, q=v=>typeof v==="number"?(Number.isFinite(v)?String(+v.toFixed(6)):""):`"${String(v).replace(/"/g,'""')}"`;
-  const L=[]; const row=(...a)=>L.push(a.map(q).join(","));
-  row("Keel seed fund simulator export"); row(""); row("INPUTS","Value");
-  G.forEach(g=>g.f.forEach(([k,label])=>row(label,S[k]))); row("Management fee years",S.MFY); row("Series A year (fixed)",YA);
-  row(""); row("RESULTS (average fund)","Traditional","Keel","Waiting");
-  row("Net TVPI",r.T.TVPI,r.K.TVPI,r.W.TVPI); row("Net IRR",r.T.irr,r.K.irr,r.W.irr); row("Gross MOIC",r.T.MOIC,r.K.MOIC,r.W.MOIC);
-  [3,5,6].forEach(y=>{row(`DPI year ${y}`,r.T.dpi[y],r.K.dpi[y],r.W.dpi[y]);row(`RVPI year ${y}`,r.T.rvpi[y],r.K.rvpi[y],r.W.rvpi[y]);row(`TVPI year ${y}`,r.T.tvpi[y],r.K.tvpi[y],r.W.tvpi[y])});
-  row("Capital lost in failures",r.lossT,r.lossK,0); row("Seed companies backed",r.d.NT,r.d.NK,"");
-  row("Keel: recovered from failures","",r.recK,""); row("Keel: recycled","",r.d.Rec,""); row("Keel: paid to LPs","",r.d.DistR,""); row("Keel: fees","",r.d.KF,"");
-  ["T","K","W"].forEach(k=>{row(""); row(NAME[k].toUpperCase()+" CASH FLOWS",...YR.map(t=>"Year "+t)); cfRows(r[k]).forEach(([l,v])=>row(l,...v))});
-  row(""); row(`SIMULATION (${lastMC.runs} funds, net TVPI)`,"Traditional","Keel","Waiting");
-  [["Chance LPs lose money","loss"],["Worst 10%","p10"],["Median","p50"],["Best 10%","p90"],["Average","mean"]].forEach(([l,k])=>row(l,lastMC.T[k],lastMC.K[k],lastMC.W[k]));
-  row(""); row("EXIT-SIZE GRID: net TVPI (Traditional / Keel / Waiting)",...OUTS.map(v=>"Outlier exit "+fmt.usd(v)));
-  lastGrid.forEach((rw,i)=>row("'Ok' exit "+fmt.usd(OKS[i]),...rw.map(c=>`${c.T.toFixed(2)} / ${c.K.toFixed(2)} / ${c.W.toFixed(2)}`)));
-  return L.join("\n");
+/* ---------------- XLSX export ---------------- */
+function buildWorkbook(){
+  const r=last, mc=lastMC, g=lastGrid;
+  const wb=XLSX.utils.book_new();
+
+  const inputRows=[["Keel fund simulator export"],[],["INPUTS","Value"]];
+  G.forEach(grp=>grp.f.forEach(([k,label])=>inputRows.push([label,S[k]])));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(inputRows),"Inputs");
+
+  const results=[["RESULTS","SAFE only","SAFE + Option"],
+    ["Net TVPI",r.T.TVPI,r.K.TVPI],["Net IRR",r.T.irr,r.K.irr],["Gross multiple",r.grossMultipleT,r.grossMultipleK],
+    ["DPI at year 4",r.T.dpi[3],r.K.dpi[3]],["RVPI at year 4",r.T.rvpi[3],r.K.rvpi[3]],
+    ["DPI at year 6",r.T.dpi[5],r.K.dpi[5]],["RVPI at year 6",r.T.rvpi[5],r.K.rvpi[5]],
+    ["Capital lost in failures",r.writeOffT,r.writeOffK],["Seed positions backed",r.d.NT,r.d.NK],
+    [],["KEEL DETAIL","",""],["Recovered from failures","",r.recoveredK],["Recycled into winners' next Series A","",r.recycledK],
+    ["Distributed to LPs from redemptions","",r.distFromRedK],["Total Keel fees","",r.feesK],["Keel fees as % of fund","",r.feesPctK]];
+  if(mc){ results.push([],[`SIMULATION (${mc.runs} funds, net TVPI)`,"SAFE only","SAFE + Option"]);
+    [["Chance LPs lose money","loss"],["Worst 10%","p10"],["Median","p50"],["Best 10%","p90"],["Average","mean"],["Average net IRR","irrMean"]]
+      .forEach(([l,k])=>results.push([l,mc.T[k],mc.K[k]])); }
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(results),"Results");
+
+  ["T","K"].forEach(k=>{
+    const o=r[k], rows=[[NAME[k],...YR.map(t=>"Year "+t)]];
+    cfRows(o).forEach(([l,v])=>rows.push([l,...v]));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Cash flows - "+NAME[k]);
+  });
+
+  if(g){ const gridRows=[["'Strong' exit \\ outlier exit",...OUTLIER_MULTS.map(v=>v+"x (SAFE only / SAFE+Option)")]];
+    g.forEach((row,i)=>gridRows.push([STRONG_MULTS[i]+"x",...row.map(c=>`${c.T.toFixed(2)} / ${c.K.toFixed(2)}`)]));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(gridRows),"Exit-size grid"); }
+
+  return wb;
 }
 let downloads=null;
 // Inside a claude.ai artifact viewer, use the platform's downloads capability.
@@ -183,17 +201,20 @@ let downloads=null;
 if(window.claude&&typeof window.claude.use==="function"){
   window.claude.use("downloads").then(dl=>{downloads=dl; if(dl) $("dl").hidden=false}).catch(()=>{});
 }else{
-  downloads={save:async({filename,data})=>{const url=URL.createObjectURL(new Blob([data],{type:"text/csv"}));
+  downloads={save:async({filename,data})=>{const url=URL.createObjectURL(new Blob([data],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
     const a=document.createElement("a");a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1000);return {status:"saved"}}};
   $("dl").hidden=false;
 }
 $("dl").onclick=async()=>{
   const st=$("dlstatus"); st.textContent="";
-  try{await downloads.save({filename:"keel-simulation.csv",data:csv()}); st.textContent="Saved keel-simulation.csv."}
-  catch(e){const c=e&&e.code; st.textContent=c==="declined"?"Download cancelled.":c==="rate_limited"?"A download prompt is already open. Try again in a moment.":"Downloads aren't available here. Use Show CSV and copy it instead."; if(c&&c!=="declined"&&c!=="rate_limited"){$("dl").hidden=true}}
+  try{
+    const wb=buildWorkbook();
+    const bin=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+    await downloads.save({filename:"keel-simulation.xlsx",data:bin});
+    st.textContent="Saved keel-simulation.xlsx.";
+  }catch(e){const c=e&&e.code; st.textContent=c==="declined"?"Download cancelled.":c==="rate_limited"?"A download prompt is already open. Try again in a moment.":"Downloads aren't available here."; if(c&&c!=="declined"&&c!=="rate_limited"){$("dl").hidden=true}}
 };
-$("showcsv").onclick=()=>{const b=$("csvbox"); const open=b.style.display==="block"; b.style.display=open?"none":"block"; $("showcsv").textContent=open?"Show CSV":"Hide CSV"; if(!open){b.value=csv();b.focus();b.select()}};
 
 /* ---------------- loop ---------------- */
 let timer=null, mcTimer=null;
@@ -202,7 +223,6 @@ function update(){
   if(!warnings()) return;
   last=run(S); renderHull(last); renderStats(last); renderChart(last); renderCF(last); renderFounder();
   clearTimeout(mcTimer); mcTimer=setTimeout(()=>{lastMC=monte(S,2000);renderHist(lastMC);lastGrid=grid(S);renderHeat(lastGrid);
-    const b=$("csvbox"); if(b.style.display==="block") b.value=csv();
     try{localStorage.setItem("keel-sim-inputs",JSON.stringify(S))}catch(e){}},180);
 }
 try{const saved=JSON.parse(localStorage.getItem("keel-sim-inputs")||"null"); if(saved&&typeof saved==="object"){S=Object.assign({},DEF,saved);preset=null}}catch(e){}

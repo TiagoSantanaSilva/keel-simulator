@@ -21,41 +21,41 @@
 
 <main>
   <h1 id="headline">What a $50M seed fund returns to its LPs</h1>
-  <p class="lede">The same fund, the same companies, three ways to invest: write the full check at seed, put part of it into a Keel protected position, or skip the seed and wait for the Series A. Bars show net TVPI; the dashed line is where LPs get their money back.</p>
+  <p class="lede">The same fund, the same companies, two ways to invest: write the full check as a SAFE, or split it into an unprotected SAFE plus a Keel Option that converts in winners and redeems in failures. Bars show net TVPI; the dashed line is where LPs get their money back.</p>
 
   <div class="hull" id="hull" aria-live="polite"></div>
   <div class="stats" id="stats"></div>
 
   <section>
     <h2>How value builds, year by year</h2>
-    <p class="sub">Year 0 is the seed. Winners and failures are revealed at the Series A in year 3.</p>
+    <p class="sub">Year 1 is the year of the initial checks. Each outcome (returns capital, solid, strong, outlier) exits in its own year.</p>
     <div class="chartbox" style="position:relative">
       <div class="tabs" role="tablist" id="chartTabs"></div>
       <div id="chart"></div>
-      <div class="legend"><span><span class="dot" style="background:var(--trad)"></span>Traditional</span><span><span class="dot" style="background:var(--keel)"></span>Keel</span><span><span class="dot" style="background:var(--wait)"></span>Waiting</span></div>
+      <div class="legend"><span><span class="dot" style="background:var(--trad)"></span>SAFE only</span><span><span class="dot" style="background:var(--keel)"></span>SAFE + Option</span></div>
       <div class="tip" id="tip"></div>
     </div>
   </section>
 
   <section>
     <h2>Across 2,000 simulated funds</h2>
-    <p class="sub">The chart above is the average fund. Real funds draw a random handful of winners. Each simulation picks every company's outcome at random using your probabilities, so you can see the spread and the chance of losing LP money.</p>
+    <p class="sub">The chart above is the average fund. Real funds draw a random handful of winners. Each simulation picks every company's outcome at random using your probabilities, so you can see the spread, the net IRR and the chance of losing LP money.</p>
     <div class="chartbox" style="position:relative"><div id="hist"></div>
-      <div class="legend"><span><span class="dot" style="background:var(--trad)"></span>Traditional</span><span><span class="dot" style="background:var(--keel)"></span>Keel</span><span><span class="dot" style="background:var(--wait)"></span>Waiting</span></div>
+      <div class="legend"><span><span class="dot" style="background:var(--trad)"></span>SAFE only</span><span><span class="dot" style="background:var(--keel)"></span>SAFE + Option</span></div>
     </div>
     <div class="mcstats" id="mcstats"></div>
   </section>
 
   <section>
     <h2>Which strategy wins, by exit size</h2>
-    <p class="sub">Every cell reruns the model with a different exit value for the 'ok' companies (rows) and the outliers (columns). The outlined cell is your current case.</p>
+    <p class="sub">Every cell reruns the model with a different multiple for strong outcomes (rows) and outliers (columns). The outlined cell is your current case.</p>
     <div class="tabs" role="tablist" id="heatTabs"></div>
     <div class="heat" id="heat"></div>
   </section>
 
   <section>
     <h2>What the founder gets</h2>
-    <p class="sub">One company's round, assuming every holder of the protected deposit acts like the fund.</p>
+    <p class="sub">One company's round, from the fund's own check.</p>
     <div class="two" id="founder"></div>
   </section>
 
@@ -63,19 +63,18 @@
     <h2>Cash flows</h2>
     <p class="sub">Every number behind the charts, for the average fund.</p>
     <div class="tabs" role="tablist" id="cfTabs"></div>
+    <div class="cfirr" id="cfirr"></div>
     <div class="tblwrap"><table class="cf" id="cf"></table></div>
   </section>
 
   <section>
     <h2>Export</h2>
-    <p class="sub">One CSV with the inputs, headline results, every yearly table, the simulation statistics and the exit-size grid.</p>
+    <p class="sub">One XLSX workbook with the inputs, headline results (including net IRR), every yearly cash-flow table, the simulation statistics and the exit-size grid.</p>
     <div class="actions">
-      <button class="btn" id="dl" hidden>Download CSV</button>
-      <button class="btn ghost" id="showcsv">Show CSV</button>
+      <button class="btn" id="dl" hidden>Download XLSX</button>
     </div>
     <div class="status" id="dlstatus" role="status"></div>
-    <textarea class="csv" id="csvbox" readonly aria-label="CSV export"></textarea>
-    <p class="note" style="margin-top:22px">Expected-value model with illustrative assumptions, not a forecast or investment advice. Keel's protection covers company failure only; vault, venue and stablecoin risk on the reserve is not modelled. The waiting fund assumes full Series A allocation and a pipeline several times larger, which flatters it.</p>
+    <p class="note" style="margin-top:22px">Expected-value model with illustrative assumptions, not a forecast or investment advice. Keel's protection covers company failure only; vault, venue and stablecoin risk on the reserve is not modelled.</p>
   </section>
 </main>
 </div>
