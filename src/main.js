@@ -24,7 +24,7 @@ applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"dark":"
 $("themebtn").addEventListener("click",()=>{
   applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");
 });
-const SECTION={shared:["Shared assumptions","Same for both strategies, so the comparison is fair."],
+const SECTION={shared:["Shared assumptions",null],
   T:["SAFE only",null],K:["SAFE + Keel",null]};
 function buildControls(){
   const host=$("controls"); host.innerHTML="";
@@ -90,7 +90,7 @@ function renderHull(r){
   const vals=[r.T.TVPI,r.K.TVPI], max=Math.max(1.5,...vals)*1.12;
   const pos=v=>Math.max(0,Math.min(100,v/max*100));
   const sub={T:fmt.usd(S.checkT)+" check",K:fmt.usd(S.safeK)+" SAFE + "+fmt.usd(S.optK)+" Option"};
-  let h="";
+  let h=`<h2 class="hulltitle">Net TVPI</h2>`;
   ["T","K"].forEach(k=>{const v=r[k].TVPI;
     h+=`<div class="row"><div class="name">${NAME[k]}<small>${sub[k]}</small></div>
       <div class="track" role="img" aria-label="${NAME[k]} net TVPI ${v.toFixed(2)}x"><div class="bar" style="width:${pos(v)}%;background:${COL[k]}"></div><div class="waterline" style="left:${pos(1)}%"></div></div>
@@ -110,13 +110,10 @@ function renderStats(r){
     ["DPI / RVPI at year 6","Same, four years further into the fund's life.",o=>o,o=>o.dpi[5].toFixed(2)+" / "+o.rvpi[5].toFixed(2)],
     ["Capital lost in failures","Principal not recovered when a company fails (Keel: after fees).",(o,k)=>k==="T"?r.writeOffT:r.writeOffK,fmt.usd],
     ["Seed positions backed","Expected number of companies funded from the initial check pool.",(o,k)=>k==="T"?r.d.NT:r.d.NK,v=>v.toFixed(1)],
-    ["Deployment pace","Months to write every initial check, at this pace. The model still treats them as one year-1 vintage — see the note below.",(o,k)=>Math.ceil((k==="T"?r.d.NT:r.d.NK)/S.checksPerMonth),v=>v+(v===1?" month":" months")],
   ];
   let h=s.map(([t,def,fn,f])=>`<div class="stat"><h3>${t}</h3><div class="kpidef">${def}</div>${trio(r,fn,f)}</div>`).join("");
   h+=`<div class="stat"><h3>Keel: recovered from failures</h3><div class="kpidef">Redeemed protected capital, split between recycling and an LP distribution.</div><div style="font-size:18px;font-weight:700" class="k">${fmt.usd(r.recoveredK)}</div><div class="hint" style="font-size:12px;color:var(--muted)">${fmt.usd(r.recycledK)} recycled into winners' next Series A, ${fmt.usd(r.distFromRedK)} distributed to LPs, ${fmt.usd(r.feesK)} in Keel fees</div></div>`;
   $("stats").innerHTML=h;
-  const maxMonths=Math.max(Math.ceil(r.d.NT/S.checksPerMonth),Math.ceil(r.d.NK/S.checksPerMonth));
-  $("deploywarn").textContent=maxMonths>12?`At this pace, writing every check takes ${maxMonths} months — longer than the model's single year-1 vintage assumes. Treat year-1 results as optimistic on timing; a future version could spread the vintage across years.`:"";
 }
 function tabs(host,items,cur,onPick){
   const el=$(host); el.innerHTML="";
@@ -190,11 +187,11 @@ function renderFounder(){
   const p=S, keepConv=1-p.redRate, dil=v=>p.roundVal?v/p.roundVal:0;
   const cards=[
     ["Normal round (SAFE only)",[["Cash at close",p.checkT],["Total capital received",p.checkT],["Dilution at this round's valuation",dil(p.checkT),"pct"]]],
-    ["SAFE + Keel round, company succeeds",[["Cash at close",p.safeK],["Option converts after "+p.dConv+" years",p.optK],["Total capital received",p.safeK+p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution over "+p.dConv+" years",p.yld*p.optK*p.dConv*(1-p.yldInv)]]],
-    ["SAFE + Keel round, company fails",[["Cash at close",p.safeK],["Redeemed by investors after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["Total capital received",p.safeK+p.optK*keepConv],["This fund's yield contribution over "+p.dRed+" years",p.yld*p.optK*p.dRed*(1-p.yldInv)]]],
+    ["SAFE + Keel round, company succeeds",[["Cash at close",p.safeK],["Option converts after "+p.dConv+" years",p.optK],["Total capital received",p.safeK+p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution over "+p.dConv+" years",p.yld*p.optK*p.dConv]]],
+    ["SAFE + Keel round, company fails",[["Cash at close",p.safeK],["Redeemed by investors after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["Total capital received",p.safeK+p.optK*keepConv],["This fund's yield contribution over "+p.dRed+" years",p.yld*p.optK*p.dRed]]],
     ["Across the whole round",[["Round valuation (post-money)",p.roundVal],["Total Option amount in the round",p.totalOpt],["This fund's share of the Option pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of protected investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],
-      ["Total yield to the company if it succeeds (over "+p.dConv+" years)",p.yld*p.totalOpt*p.dConv*(1-p.yldInv)],
-      ["Total yield to the company if it fails (over "+p.dRed+" years)",p.yld*p.totalOpt*p.dRed*(1-p.yldInv)]]]];
+      ["Total yield to the company if it succeeds (over "+p.dConv+" years)",p.yld*p.totalOpt*p.dConv],
+      ["Total yield to the company if it fails (over "+p.dRed+" years)",p.yld*p.totalOpt*p.dRed]]]];
   $("founder").innerHTML=cards.map(([t,rows])=>`<div class="founder"><h3 style="margin:0 0 10px;font-size:15px">${t}</h3><dl>${rows.map(([a,v,f])=>`<dt>${a}</dt><dd>${f==="pct"?fmt.pct1(v):f==="n"?v.toFixed(1):fmt.usdFull(v)}</dd>`).join("")}</dl></div>`).join("");
 }
 function cfRows(o){

@@ -21,13 +21,17 @@ Years are 0-indexed and mean "years after the initial check" directly: an input 
 or `ex1` names the array index at which it fires. The UI labels them 1 to 12, matching the
 workbook's own year numbering (its "year 1" is the year of the initial checks).
 
-**Single vintage, like the workbook.** All initial checks are treated as written in year 1,
-regardless of `checksPerMonth`. That input (and the "Deployment pace" stat) is informational
-only — it tells you how many months it actually takes to write every check at that pace, so
-you can sanity-check the year-1 assumption, but it doesn't shift any cash flow. Modelling a
-staggered vintage properly would mean moving the whole engine to monthly resolution (every
-formula here is keyed off a single check date); flagged as a possible future change rather
-than attempted as a partial fix.
+**Single vintage, like the workbook.** All initial checks are treated as written in year 1.
+Modelling a staggered vintage properly would mean moving the whole engine to monthly
+resolution (every formula here is keyed off a single check date) — a possible future change,
+not attempted as a partial fix.
+
+**Follow-ons and recycled capital are lump sums, not attributed to individual companies.**
+The outcome buckets each carry their own exit year (`ex2`/`ex3`/`ex4`), but `foExit` and
+`recExit` are each a single year for the *entire* pool — matching the workbook's own "blended
+return on follow-on capital, same for both funds" framing. Modelling per-company follow-on
+timing would mean tracking which specific companies received follow-on and recycled capital
+and when each one individually exits, which this expected-value model doesn't do.
 
 - **Year 1:** initial checks. Management fees are charged for `MFY` years starting here.
 - **Years 2 to `dConv`+1:** Keel charges its annual fee on positions still protected and
@@ -55,7 +59,7 @@ than attempted as a partial fix.
 | NT, NK | Positions backed | checkPool / checkT, checkPool / checkK |
 | feePerPos | Keel's annual fee per position | `keelFee` × `optK` (a single flat annual rate on the protected balance) |
 | totalFees | Total Keel fees | convertedK × feePerPos × dConv + redeemedK × feePerPos × dRed |
-| recovered | Capital recovered via redemption | redeemedK × optK × (1 + yld × yldInv × dRed) |
+| recovered | Capital recovered via redemption | redeemedK × optK (100% of reserve yield goes to the company, so no yield boost on the fund's recovery) |
 | recycled | Recycled into winners' next Series A | min(recovered × recShare, F × recCap) |
 
 `convertedK` is every position that is *not* redeemed (successes plus unredeemed failures) —
@@ -76,6 +80,13 @@ Both strategies draw the follow-on reserve as the *same dollar amount* (a share 
 capital, not of either strategy's own check pool) — this is deliberate, matching the
 workbook's own rationale ("both funds hold the same follow-on reserve ... so the comparison is
 fair"), and it's why moving the `reserve` slider visibly changes the SAFE-only side too.
+"Same" describes only this base pool, though — it's `foReserve` for SAFE only vs.
+`foReserveK = foReserve − totalFees` for SAFE + Keel (fees come out first). Recycled capital
+is a second, separate pool that only SAFE + Keel has: on top of its (fee-reduced) share of the
+base reserve, SAFE + Keel *also* deploys `recycled` into winners at their next Series A. So
+Keel strategy's total capital reaching winners is the base reserve's pro-rata share minus fees,
+plus this additional recycled amount — strictly more machinery than SAFE only has, even though
+the base pool itself is sized identically.
 
 **Pricing deviates from the workbook by design.** `Keel_Fund_Model.xlsx` prices Keel with a
 tiered one-off licence fee plus a banded annual rate. This app instead exposes one flat annual
