@@ -21,7 +21,8 @@ export const G = [
   ["F","Fund size",10e6,300e6,5e6,"usd"],
   ["MFY","Management fee period (years)",5,12,1,"n"],
   ["MF","Management fee (annual)",0,.05,.0025,"pct"],
-  ["carry","Carried interest",0,.3,.05,"pct"]]},
+  ["carry","Carried interest",0,.3,.05,"pct"],
+  ["checksPerMonth","Checks written per month",1,20,1,"n","For context only. The model treats all initial checks as written in year 1 either way (a single vintage, matching the workbook) — see the deployment pace shown below."]]},
  {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[]},
  {id:"fo",section:"shared",title:"Follow-on reserve (same for both strategies)",f:[
   ["reserve","Follow-on reserve (% of investable capital)",0,.5,.01,"pct","Held back by both strategies, so the comparison is fair. This is why it moves both sides' numbers."],
@@ -47,13 +48,13 @@ export const G = [
   ["yldInv","Share of reserve yield paid to the investor",0,1,.05,"pct","Conservative default 0%: the rest goes to the company."]]},
  {id:"rec",section:"K",title:"Recycling",f:[
   ["recShare","Share of recovered capital recycled into follow-ons",0,1,.05,"pct","Into winners' next Series A. The rest is distributed to LPs."],
-  ["recCap","Recycling cap (% of fund size)",0,.4,.01,"pct"],
+  ["recCap","Recycling cap (% of fund size)",0,.4,.01,"pct","The most that can be recycled into follow-ons, as a share of the whole fund — even if more is recovered from failures, anything above the cap goes straight to LPs instead."],
   ["recMult","Multiple on recycled capital (gross)",1,6,.25,"x"],
   ["recExit","Recycled capital exits (years after initial check)",1,11,1,"yr","Must be later than the redemption year."]]},
  {id:"pricing",section:"K",title:"Keel pricing",f:[
   ["keelFee","Reserve fee paid by the fund (annual)",0,.05,.0025,"pct2","Charged on the protected (Option) balance, while it's protected."]]},
 ];
-export const DEF = {F:50e6,MFY:10,MF:.02,carry:.2,
+export const DEF = {F:50e6,MFY:10,MF:.02,carry:.2,checksPerMonth:8,
   checkT:500e3,safeK:0,optK:500e3,premium:0,roundVal:10e6,totalOpt:1e6,
   reserve:.2,foMult:3,foYear:2,foExit:7,
   sh0:.7,sh1:0,mul1:1,ex1:5,sh2:.2,mul2:3,ex2:6,sh3:.08,mul3:10,ex3:7,sh4:.02,mul4:50,ex4:8,

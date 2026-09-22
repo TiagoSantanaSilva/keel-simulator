@@ -21,6 +21,14 @@ Years are 0-indexed and mean "years after the initial check" directly: an input 
 or `ex1` names the array index at which it fires. The UI labels them 1 to 12, matching the
 workbook's own year numbering (its "year 1" is the year of the initial checks).
 
+**Single vintage, like the workbook.** All initial checks are treated as written in year 1,
+regardless of `checksPerMonth`. That input (and the "Deployment pace" stat) is informational
+only — it tells you how many months it actually takes to write every check at that pace, so
+you can sanity-check the year-1 assumption, but it doesn't shift any cash flow. Modelling a
+staggered vintage properly would mean moving the whole engine to monthly resolution (every
+formula here is keyed off a single check date); flagged as a possible future change rather
+than attempted as a partial fix.
+
 - **Year 1:** initial checks. Management fees are charged for `MFY` years starting here.
 - **Years 2 to `dConv`+1:** Keel charges its annual fee on positions still protected and
   awaiting a conversion decision.

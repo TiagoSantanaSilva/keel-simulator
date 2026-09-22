@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Keel fund simulator</title>
+<script>(function(){try{var t=localStorage.getItem("keel-sim-theme")||"light";document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","light")}})();</script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⛵</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,7 +13,7 @@
 <body>
 <div class="app">
 <aside class="rail" aria-label="Assumptions">
-  <div class="brand"><b>Keel</b><span>seed fund simulator</span></div>
+  <div class="brand"><b>Keel</b><span>seed fund simulator</span><button type="button" class="themebtn" id="themebtn" aria-label="Switch between day and night layout"></button></div>
   <div class="note">Change any assumption. Every number on the page updates.</div>
   <div class="presets" role="group" aria-label="Scenario presets" id="presets"></div>
   <div id="controls"></div>
@@ -25,6 +26,7 @@
 
   <div class="hull" id="hull" aria-live="polite"></div>
   <div class="stats" id="stats"></div>
+  <p class="deploywarn" id="deploywarn" role="status"></p>
 
   <section>
     <h2>How value builds, year by year</h2>

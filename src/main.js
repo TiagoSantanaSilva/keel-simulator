@@ -13,6 +13,18 @@ let preset = "Your base case";
 
 /* ---------------- controls ---------------- */
 const $=id=>document.getElementById(id);
+
+/* ---------------- theme ---------------- */
+const THEME_KEY="keel-sim-theme";
+function applyTheme(t){
+  document.documentElement.setAttribute("data-theme",t);
+  const btn=$("themebtn"); if(btn) btn.textContent=t==="dark"?"☀️ Day":"🌙 Night";
+  try{localStorage.setItem(THEME_KEY,t)}catch(e){}
+}
+applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"dark":"light");
+$("themebtn").addEventListener("click",()=>{
+  applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");
+});
 const SECTION={shared:["Shared assumptions","Same for both strategies, so the comparison is fair."],
   T:["SAFE only",null],K:["SAFE + Keel",null]};
 function buildControls(){
@@ -115,10 +127,13 @@ function renderStats(r){
     ["DPI / RVPI at year 6","Same, four years further into the fund's life.",o=>o,o=>o.dpi[5].toFixed(2)+" / "+o.rvpi[5].toFixed(2)],
     ["Capital lost in failures","Principal not recovered when a company fails (Keel: after fees).",(o,k)=>k==="T"?r.writeOffT:r.writeOffK,fmt.usd],
     ["Seed positions backed","Expected number of companies funded from the initial check pool.",(o,k)=>k==="T"?r.d.NT:r.d.NK,v=>v.toFixed(1)],
+    ["Deployment pace","Months to write every initial check, at this pace. The model still treats them as one year-1 vintage — see the note below.",(o,k)=>Math.ceil((k==="T"?r.d.NT:r.d.NK)/S.checksPerMonth),v=>v+(v===1?" month":" months")],
   ];
   let h=s.map(([t,def,fn,f])=>`<div class="stat"><h3>${t}</h3><div class="kpidef">${def}</div>${trio(r,fn,f)}</div>`).join("");
   h+=`<div class="stat"><h3>Keel: recovered from failures</h3><div class="kpidef">Redeemed protected capital, split between recycling and an LP distribution.</div><div style="font-size:18px;font-weight:700" class="k">${fmt.usd(r.recoveredK)}</div><div class="hint" style="font-size:12px;color:var(--muted)">${fmt.usd(r.recycledK)} recycled into winners' next Series A, ${fmt.usd(r.distFromRedK)} distributed to LPs, ${fmt.usd(r.feesK)} in Keel fees</div></div>`;
   $("stats").innerHTML=h;
+  const maxMonths=Math.max(Math.ceil(r.d.NT/S.checksPerMonth),Math.ceil(r.d.NK/S.checksPerMonth));
+  $("deploywarn").textContent=maxMonths>12?`At this pace, writing every check takes ${maxMonths} months — longer than the model's single year-1 vintage assumes. Treat year-1 results as optimistic on timing; a future version could spread the vintage across years.`:"";
 }
 function tabs(host,items,cur,onPick){
   const el=$(host); el.innerHTML="";
