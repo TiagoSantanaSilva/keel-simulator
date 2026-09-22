@@ -60,12 +60,15 @@ details.grp[open] summary::after{content:"\2212"}
 table.outtbl{border-collapse:collapse;width:100%;font-size:12.5px}
 table.outtbl th{text-align:left;color:var(--muted);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--line)}
 table.outtbl td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
-table.outtbl td:first-child{font-weight:600;white-space:nowrap}
+table.outtbl td.dim{color:var(--muted);text-align:center}
 table.outtbl .hint{font-weight:400;white-space:normal;max-width:20ch}
 table.outtbl input.cell{width:52px;font:inherit;border:1px solid var(--line);border-radius:5px;background:var(--sunk);color:var(--ink);padding:3px 4px}
+table.outtbl input.cell-label{width:100%;min-width:88px;font-weight:600;text-align:left}
 table.outtbl tfoot td{font-weight:700;padding-top:8px}
 table.outtbl tfoot #outtotal.ok{color:var(--pos)}
 table.outtbl tfoot #outtotal.bad{color:var(--neg)}
+.rowdel{border:1px solid var(--line);background:var(--sunk);color:var(--neg);border-radius:5px;width:22px;height:22px;line-height:1;cursor:pointer;font-size:14px}
+.outadd{margin-top:8px;padding:5px 12px;font-size:12.5px}
 
 /* main */
 main{padding:28px clamp(16px,4vw,48px) 64px;min-width:0}

@@ -4,7 +4,11 @@ Mirrors `Keel_Fund_Model.xlsx` (Inputs + Fund Model tabs). All amounts are expec
 across the portfolio, so position counts can be fractional. The Monte Carlo section is the
 exception: it draws whole positions at random.
 
-Two strategies are compared, both funded from the same fund and the same outcome distribution:
+Two strategies are compared, both funded from the same fund and the same outcome distribution.
+The failure bucket is fixed (`sh0`, `failLabel` — no multiple or exit, since it never returns
+anything); every other outcome lives in `outcomes`, a freely editable array of
+`{label, share, mult, exit}`. Rows can be added, removed or renamed — the engine iterates the
+array, so its length isn't fixed anywhere.
 
 - **SAFE only:** every position is a single unprotected SAFE (`checkT`), independent of the
   SAFE + Keel check size below.
@@ -18,8 +22,8 @@ Two strategies are compared, both funded from the same fund and the same outcome
 ## Timeline
 
 Years are 0-indexed and mean "years after the initial check" directly: an input like `foYear`
-or `ex1` names the array index at which it fires. The UI labels them 1 to 12, matching the
-workbook's own year numbering (its "year 1" is the year of the initial checks).
+or an outcome's `exit` names the array index at which it fires. The UI labels them 1 to 12,
+matching the workbook's own year numbering (its "year 1" is the year of the initial checks).
 
 **Single vintage, like the workbook.** All initial checks are treated as written in year 1.
 Modelling a staggered vintage properly would mean moving the whole engine to monthly
@@ -27,11 +31,11 @@ resolution (every formula here is keyed off a single check date) — a possible 
 not attempted as a partial fix.
 
 **Follow-ons and recycled capital are lump sums, not attributed to individual companies.**
-The outcome buckets each carry their own exit year (`ex2`/`ex3`/`ex4`), but `foExit` and
-`recExit` are each a single year for the *entire* pool — matching the workbook's own "blended
-return on follow-on capital, same for both funds" framing. Modelling per-company follow-on
-timing would mean tracking which specific companies received follow-on and recycled capital
-and when each one individually exits, which this expected-value model doesn't do.
+Each outcome bucket carries its own exit year, but `foExit` and `recExit` are each a single
+year for the *entire* pool — matching the workbook's own "blended return on follow-on
+capital, same for both funds" framing. Modelling per-company follow-on timing would mean
+tracking which specific companies received follow-on and recycled capital and when each one
+individually exits, which this expected-value model doesn't do.
 
 - **Year 1:** initial checks. Management fees are charged for `MFY` years starting here.
 - **Years 2 to `dConv`+1:** Keel charges its annual fee on positions still protected and
@@ -42,8 +46,8 @@ and when each one individually exits, which this expected-value model doesn't do
 - **Year `foYear`+1:** the follow-on reserve is deployed (net of Keel fees, for SAFE + Keel).
   This reserve is sized identically for both strategies (see Strategies below) — it's the
   most common source of "why did the SAFE-only number move?" confusion.
-- **Years `ex2`+1 to `ex4`+1:** each outcome bucket (solid, strong, outlier) exits in its own
-  year and pays out its multiple on the whole check.
+- Each outcome bucket exits, at its own `exit`+1 year, paying out its multiple on the whole
+  check.
 - **Year `foExit`+1:** the follow-on reserve exits at `foMult`.
 - **Year `recExit`+1:** capital recycled from redemptions into winners' next round exits at
   `recMult`.
@@ -128,7 +132,8 @@ purely from the cash-flow rows below, matching the workbook exactly.
 
 ## Monte Carlo (`monte`)
 
-Each run draws every position's outcome independently from the same shares (`sh0`..`sh4`).
+Each run draws every position's outcome independently from the same shares (`sh0` plus each
+`outcomes[i].share`).
 Redemption, fees and recycling are applied to the random failure count using the same
 formulas as the deterministic model. Cash-flow timing is unchanged across runs (only the
 dollar amounts vary), so each run gets its own net IRR, not just a TVPI. Seeded RNG, so

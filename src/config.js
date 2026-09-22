@@ -5,15 +5,11 @@
 // comparison is fair), "T" (SAFE only) or "K" (SAFE + Keel). main.js renders a labelled,
 // colour-coded header whenever the section changes.
 //
-// The "out" (Outcomes) group is rendered as a table (see main.js) instead of sliders, one
-// row per outcome bucket with Share / Multiple / Exit year columns. OUTCOMES below drives
-// that table; it is the source of truth for those fields, not the `f` array on group "out".
-export const OUTCOMES = [
-  ["sh0", null, null, "Failure", "Returns nothing in the SAFE-only strategy."],
-  ["sh2", "mul2", "ex2", "Solid outcome"],
-  ["sh3", "mul3", "ex3", "Strong outcome"],
-  ["sh4", "mul4", "ex4", "Outlier"],
-];
+// The "out" (Outcomes) group is rendered as an editable table (see main.js) instead of
+// sliders: one fixed Failure row (DEF.failLabel/sh0 -- no multiple or exit, since it never
+// returns anything) plus a user-editable, freely add/removable list of outcome buckets in
+// DEF.outcomes ({label, share, mult, exit}). There's no fixed set of fields for the success
+// buckets -- the array can be any length, which is what lets the table grow or shrink.
 
 export const G = [
  {id:"fund",section:"shared",title:"Fund",open:true,f:[
@@ -53,7 +49,12 @@ export const G = [
 export const DEF = {F:50e6,MFY:10,MF:.02,carry:.2,
   checkT:500e3,safeK:0,optK:500e3,premium:0,roundVal:10e6,totalOpt:1e6,
   reserve:.2,foMult:3,foYear:2,foExit:7,
-  sh0:.7,sh2:.2,mul2:3,ex2:6,sh3:.08,mul3:10,ex3:7,sh4:.02,mul4:50,ex4:8,
+  failLabel:"Failure",sh0:.7,
+  outcomes:[
+    {label:"Solid outcome",share:.2,mult:3,exit:6},
+    {label:"Strong outcome",share:.08,mult:10,exit:7},
+    {label:"Outlier",share:.02,mult:50,exit:8},
+  ],
   redRate:.75,dConv:2,dRed:3,
   yld:.04,
   recShare:.5,recMult:3,recExit:8,

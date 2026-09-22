@@ -1,6 +1,6 @@
 import "./styles.css";
 import * as XLSX from "xlsx";
-import { G, DEF, OUTCOMES } from "./config.js";
+import { G, DEF } from "./config.js";
 import { fmt } from "./format.js";
 import { YR, run, monte } from "./engine.js";
 
@@ -8,7 +8,10 @@ import { YR, run, monte } from "./engine.js";
 // older version of the model isn't silently merged onto new defaults.
 const SCHEMA_VERSION = 2;
 
-let S = Object.assign({}, DEF);
+// DEF.outcomes is an array of objects -- a plain Object.assign would copy the reference,
+// not the contents, so editing a row in S would silently mutate the shared default too.
+const cloneDef=()=>({...DEF, outcomes: DEF.outcomes.map(o=>({...o}))});
+let S = cloneDef();
 
 /* ---------------- controls ---------------- */
 const $=id=>document.getElementById(id);
@@ -57,24 +60,55 @@ function buildControls(){
 }
 function buildOutcomesTable(){
   const wrap=document.createElement("div"); wrap.className="outwrap";
-  let h=`<table class="outtbl"><thead><tr><th>Outcome</th><th>Share</th><th>Multiple</th><th>Exit year</th></tr></thead><tbody>`;
-  OUTCOMES.forEach(([shK,mulK,exK,label,hint])=>{
-    h+=`<tr><td>${label}${hint?`<div class="hint">${hint}</div>`:""}</td>
-      <td><input type="number" class="cell" id="in_${shK}" min="0" max="100" step="1" value="${Math.round(S[shK]*100)}"> %</td>
-      <td>${mulK?`<input type="number" class="cell" id="in_${mulK}" min="0" max="500" step="0.5" value="${S[mulK]}">x`:"—"}</td>
-      <td>${exK?`<input type="number" class="cell" id="in_${exK}" min="1" max="11" step="1" value="${S[exK]}">`:"—"}</td></tr>`;
-  });
-  h+=`</tbody><tfoot><tr><td>Total</td><td id="outtotal" colspan="3"></td></tr></tfoot></table>`;
-  wrap.innerHTML=h;
-  OUTCOMES.forEach(([shK,mulK,exK])=>{
-    wrap.querySelector("#in_"+shK).addEventListener("input",e=>{S[shK]=parseFloat(e.target.value||0)/100; paintOutcomesTable(); schedule()});
-    if(mulK) wrap.querySelector("#in_"+mulK).addEventListener("input",e=>{S[mulK]=parseFloat(e.target.value||0); schedule()});
-    if(exK) wrap.querySelector("#in_"+exK).addEventListener("input",e=>{S[exK]=parseFloat(e.target.value||0); schedule()});
-  });
+  renderOutcomesRows(wrap);
   return wrap;
 }
+function renderOutcomesRows(wrap){
+  let h=`<table class="outtbl"><thead><tr><th>Outcome</th><th>Share</th><th>Multiple</th><th>Exit year</th><th></th></tr></thead><tbody>`;
+  h+=`<tr><td><input type="text" class="cell cell-label" id="in_failLabel" value="${S.failLabel}"></td>
+    <td><input type="number" class="cell" id="in_sh0" min="0" max="100" step="1" value="${Math.round(S.sh0*100)}"> %</td>
+    <td class="dim">—</td><td class="dim">—</td><td></td></tr>`;
+  S.outcomes.forEach((o,i)=>{
+    h+=`<tr>
+      <td><input type="text" class="cell cell-label" data-i="${i}" data-f="label" value="${o.label}"></td>
+      <td><input type="number" class="cell" data-i="${i}" data-f="share" min="0" max="100" step="1" value="${Math.round(o.share*100)}"> %</td>
+      <td><input type="number" class="cell" data-i="${i}" data-f="mult" min="0" max="1000" step="0.5" value="${o.mult}">x</td>
+      <td><input type="number" class="cell" data-i="${i}" data-f="exit" min="1" max="11" step="1" value="${o.exit}"></td>
+      <td><button type="button" class="rowdel" data-i="${i}" aria-label="Remove ${o.label}">×</button></td>
+    </tr>`;
+  });
+  h+=`</tbody><tfoot><tr><td>Total</td><td id="outtotal" colspan="4"></td></tr></tfoot></table>
+    <button type="button" class="btn ghost outadd" id="outadd">+ Add outcome</button>`;
+  wrap.innerHTML=h;
+
+  wrap.querySelector("#in_failLabel").addEventListener("input",e=>{S.failLabel=e.target.value; schedule()});
+  wrap.querySelector("#in_sh0").addEventListener("input",e=>{S.sh0=parseFloat(e.target.value||0)/100; paintOutcomesTable(); schedule()});
+  wrap.querySelectorAll("input[data-f]").forEach(inp=>{
+    inp.addEventListener("input",()=>{
+      const i=+inp.dataset.i, f=inp.dataset.f;
+      if(f==="label") S.outcomes[i].label=inp.value;
+      else if(f==="share"){ S.outcomes[i].share=parseFloat(inp.value||0)/100; paintOutcomesTable(); }
+      else S.outcomes[i][f]=parseFloat(inp.value||0);
+      schedule();
+    });
+  });
+  wrap.querySelectorAll(".rowdel").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      S.outcomes.splice(+btn.dataset.i,1);
+      renderOutcomesRows(wrap);
+      schedule();
+    });
+  });
+  wrap.querySelector("#outadd").addEventListener("click",()=>{
+    const lastExit=S.outcomes.length?S.outcomes[S.outcomes.length-1].exit:YR[YR.length-1];
+    S.outcomes.push({label:"New outcome",share:0,mult:1,exit:lastExit});
+    renderOutcomesRows(wrap);
+    schedule();
+  });
+  paintOutcomesTable();
+}
 function paintOutcomesTable(){
-  const sum=OUTCOMES.reduce((a,[shK])=>a+S[shK],0);
+  const sum=S.sh0+S.outcomes.reduce((a,o)=>a+o.share,0);
   const el=$("outtotal"); if(!el) return;
   const ok=Math.abs(sum-1)<0.001;
   el.textContent=(sum*100).toFixed(0)+"%"+(ok?" ✓ matches 100%":" ✗ should be 100%");
@@ -212,7 +246,7 @@ function renderCF(r){
     rows.map(([l,v,f,em])=>`<tr class="${em?'em':''}"><td>${l}</td>${v.map(x=>`<td>${f==="x"?x.toFixed(2)+"x":(Math.abs(x)<0.5?"-":fmt.usdFull(x))}</td>`).join("")}</tr>`).join("")+"</tbody>";
 }
 function warnings(){
-  const w=[]; const shareSum=OUTCOMES.reduce((a,[shK])=>a+S[shK],0);
+  const w=[]; const shareSum=S.sh0+S.outcomes.reduce((a,o)=>a+o.share,0);
   if(Math.abs(shareSum-1)>0.001) w.push(`Outcome shares sum to ${(shareSum*100).toFixed(0)}%, not 100%.`);
   if(S.foExit<=S.foYear) w.push("Follow-ons must exit after they're deployed.");
   if(S.recExit<=S.dRed) w.push("Recycled capital must exit after the redemption year.");
@@ -227,11 +261,15 @@ function buildWorkbook(){
 
   const inputRows=[["Keel fund simulator export"],[],["INPUTS","Value"]];
   G.forEach(grp=>{
-    if(grp.id==="out"){OUTCOMES.forEach(([shK,mulK,exK,label])=>{
-      inputRows.push([label+": share",S[shK]]);
-      if(mulK) inputRows.push([label+": multiple",S[mulK]]);
-      if(exK) inputRows.push([label+": exit year",S[exK]]);
-    }); return}
+    if(grp.id==="out"){
+      inputRows.push([S.failLabel+": share",S.sh0]);
+      S.outcomes.forEach(o=>{
+        inputRows.push([o.label+": share",o.share]);
+        inputRows.push([o.label+": multiple",o.mult]);
+        inputRows.push([o.label+": exit year",o.exit]);
+      });
+      return;
+    }
     grp.f.forEach(([k,label])=>inputRows.push([label,S[k]]));
   });
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(inputRows),"Inputs");
@@ -290,7 +328,8 @@ try{
   const saved=JSON.parse(localStorage.getItem("keel-sim-inputs")||"null");
   if(saved&&typeof saved==="object"&&saved.v===SCHEMA_VERSION&&saved.s&&typeof saved.s==="object"){
     const clean={}; Object.keys(DEF).forEach(k=>{if(k in saved.s) clean[k]=saved.s[k]});
-    S=Object.assign({},DEF,clean);
+    S=Object.assign(cloneDef(),clean);
+    if(!Array.isArray(S.outcomes)||!S.outcomes.every(o=>o&&typeof o.label==="string")) S.outcomes=cloneDef().outcomes;
   }else{
     localStorage.removeItem("keel-sim-inputs");
   }

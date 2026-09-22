@@ -3,16 +3,17 @@
 // Mirrors Keel_Fund_Model.xlsx (Inputs + Fund Model tabs). See docs/model-spec.md.
 //
 // Years are 0-indexed and mean "years after the initial check" directly: index t
-// is the year in which an input like `foYear` or `ex2` fires. YR holds the
-// 1-based labels shown in the UI (YR[t] === t+1), matching the workbook's own
-// year numbering, where "year 1" is the year of the initial checks.
+// is the year in which an input like `foYear` or an outcome's `exit` fires. YR
+// holds the 1-based labels shown in the UI (YR[t] === t+1), matching the
+// workbook's own year numbering, where "year 1" is the year of the initial checks.
 export const YR = [1,2,3,4,5,6,7,8,9,10,11,12];
 
-// Outcome buckets with a multiple and an exit year (i.e. every bucket except failure).
-// Single source of truth so a bucket can be added or removed here without hunting down
-// every place it was previously spelled out (sh2*mul2+sh3*mul3+sh4*mul4, ...).
-const SUCCESS=[["sh2","mul2","ex2"],["sh3","mul3","ex3"],["sh4","mul4","ex4"]];
-const successMix=p=>SUCCESS.reduce((a,[sh,mul])=>a+p[sh]*p[mul],0);
+// p.sh0 (share) is the failure bucket: no multiple, no exit -- it never returns
+// anything, so it only ever appears in write-off/redemption math. Every other
+// outcome bucket lives in p.outcomes, a user-editable array of
+// {label, share, mult, exit}, so the table can grow or shrink freely and each
+// row is looked up by array position instead of a fixed field name.
+const successMix=p=>p.outcomes.reduce((a,o)=>a+o.share*o.mult,0);
 
 export function irr(cf){
   const npv=r=>{let f=1,s=0;for(let i=0;i<cf.length;i++){s+=cf[i]/f;f*=(1+r)}return s};
@@ -108,13 +109,13 @@ export function run(p){
     T.paid[t]=a+b;
 
     let e=0;
-    SUCCESS.forEach(([sh,mul,ex])=>{if(t===p[ex]) e+=d.NT*p.checkT*p[sh]*p[mul]});
+    p.outcomes.forEach(o=>{if(t===o.exit) e+=d.NT*p.checkT*o.share*o.mult});
     if(t===p.foExit) e+=d.foReserve*p.foMult;
     R(T,"Exits",t,e);
     T.dist[t]=e;
 
     let n=0;
-    SUCCESS.forEach(([sh,,ex])=>{if(t<p[ex]) n+=d.NT*p.checkT*p[sh]});
+    p.outcomes.forEach(o=>{if(t<o.exit) n+=d.NT*p.checkT*o.share});
     if(t>=p.foYear&&t<p.foExit) n+=d.foReserve;
     T.nav[t]=n;
 
@@ -125,7 +126,7 @@ export function run(p){
     K.paid[t]=a+b+fee;
 
     e=0;
-    SUCCESS.forEach(([sh,mul,ex])=>{if(t===p[ex]) e+=d.NK*d.checkK*p[sh]*p[mul]/(1+p.premium)});
+    p.outcomes.forEach(o=>{if(t===o.exit) e+=d.NK*d.checkK*o.share*o.mult/(1+p.premium)});
     if(t===p.dRed) e+=d.distFromRed;
     if(t===p.foExit) e+=d.foReserveK*p.foMult;
     if(t===p.recExit) e+=d.recycled*p.recMult;
@@ -134,7 +135,7 @@ export function run(p){
     K.dist[t]=e;
 
     n=0;
-    SUCCESS.forEach(([sh,,ex])=>{if(t<p[ex]) n+=d.NK*d.checkK*p[sh]});
+    p.outcomes.forEach(o=>{if(t<o.exit) n+=d.NK*d.checkK*o.share});
     if(t<p.dRed) n+=d.redeemedK*p.optK;
     if(t>=p.foYear&&t<p.foExit) n+=d.foReserveK;
     if(t>=p.dRed&&t<p.recExit) n+=d.recycled;
@@ -168,9 +169,12 @@ export function monte(p,runs){
   const NT=Math.max(1,Math.round(d.NT)), NK=Math.max(1,Math.round(d.NK));
   const mg=t=>t<p.MFY?p.F*p.MF:0;
   const wf=x=>Math.min(x,p.F)+(1-p.carry)*Math.max(0,x-p.F);
-  // Bucket 0 is failure; buckets 1..3 are SUCCESS[0..2] (solid, strong, outlier).
-  const th=[p.sh0,p.sh0+p.sh2,p.sh0+p.sh2+p.sh3,1];
-  const draw=count=>{const c=[0,0,0,0];for(let i=0;i<count;i++){const u=rnd();let b=3;for(let k=0;k<4;k++){if(u<th[k]){b=k;break}}c[b]++}return c};
+  // Bucket 0 is failure; buckets 1..n mirror p.outcomes in order. The last threshold is
+  // forced to 1 so a share-sum that doesn't add to exactly 100% (e.g. mid-edit) can't
+  // leave a gap no draw lands in.
+  const th=[p.sh0]; p.outcomes.forEach(o=>th.push(th[th.length-1]+o.share)); th[th.length-1]=1;
+  const nBuckets=p.outcomes.length+1;
+  const draw=count=>{const c=new Array(nBuckets).fill(0);for(let i=0;i<count;i++){const u=rnd();let b=nBuckets-1;for(let k=0;k<th.length;k++){if(u<th[k]){b=k;break}}c[b]++}return c};
 
   const paidT=[];for(let t=0;t<N;t++)paidT[t]=mg(t)+(t===0?d.checkPool:0)+(t===p.foYear?d.foReserve:0);
 
@@ -179,7 +183,7 @@ export function monte(p,runs){
     const cT=draw(NT), cK=draw(NK);
 
     const distT=new Array(N).fill(0);
-    SUCCESS.forEach(([,mul,ex],i)=>{if(p[ex]<N) distT[p[ex]]+=cT[i+1]*p.checkT*p[mul]});
+    p.outcomes.forEach((o,i)=>{if(o.exit<N) distT[o.exit]+=cT[i+1]*p.checkT*o.mult});
     if(p.foExit<N)distT[p.foExit]+=d.foReserve*p.foMult;
     let cgd=0,lpcPrev=0;const netT=new Array(N);
     for(let t=0;t<N;t++){cgd+=distT[t];const lpc=wf(cgd);netT[t]=(lpc-lpcPrev)-paidT[t];lpcPrev=lpc}
@@ -199,7 +203,7 @@ export function monte(p,runs){
       const fee=(t>=1&&t<=p.dConv?convertedK*d.feePerPos:0)+(t>=1&&t<=p.dRed?redeemedK*d.feePerPos:0);
       paidK[t]=a+b+fee;
     }
-    SUCCESS.forEach(([,mul,ex],i)=>{if(p[ex]<N) distK[p[ex]]+=cK[i+1]*d.checkK*p[mul]/(1+p.premium)});
+    p.outcomes.forEach((o,i)=>{if(o.exit<N) distK[o.exit]+=cK[i+1]*d.checkK*o.mult/(1+p.premium)});
     if(p.dRed<N)distK[p.dRed]+=distFromRed;
     if(p.foExit<N)distK[p.foExit]+=foReserveK*p.foMult;
     if(p.recExit<N)distK[p.recExit]+=recycled*p.recMult;

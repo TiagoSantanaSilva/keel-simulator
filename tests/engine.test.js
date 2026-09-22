@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DEF, OUTCOMES } from "../src/config.js";
+import { DEF } from "../src/config.js";
 import { run, monte, irr, YR } from "../src/engine.js";
 
 // Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for two deliberate
@@ -147,20 +147,34 @@ describe("Monte Carlo", () => {
 
 
 describe("outcome buckets", () => {
-  it("has no 'returns capital' bucket, and the remaining shares still sum to 100%", () => {
-    expect(OUTCOMES.some(([shK]) => shK === "sh1")).toBe(false);
-    const sum = OUTCOMES.reduce((a, [shK]) => a + DEF[shK], 0);
+  it("is a plain array of {label, share, mult, exit}, and the shares (plus failure) sum to 100%", () => {
+    expect(Array.isArray(DEF.outcomes)).toBe(true);
+    expect(DEF.outcomes.length).toBeGreaterThan(0);
+    DEF.outcomes.forEach(o => {
+      expect(typeof o.label).toBe("string");
+      expect(typeof o.share).toBe("number");
+      expect(typeof o.mult).toBe("number");
+      expect(typeof o.exit).toBe("number");
+    });
+    const sum = DEF.sh0 + DEF.outcomes.reduce((a, o) => a + o.share, 0);
     expect(sum).toBeCloseTo(1, 6);
   });
 
-  it("maps each Monte Carlo bucket to the right multiple and exit year (regression guard for the SUCCESS-array refactor)", () => {
+  it("supports adding and removing rows freely", () => {
+    const extra = { ...DEF, outcomes: [...DEF.outcomes, { label: "Mega outlier", share: 0, mult: 500, exit: 9 }] };
+    expect(() => run(extra)).not.toThrow();
+    const fewer = { ...DEF, sh0: DEF.sh0 + DEF.outcomes[DEF.outcomes.length - 1].share, outcomes: DEF.outcomes.slice(0, -1) };
+    expect(() => run(fewer)).not.toThrow();
+  });
+
+  it("maps each Monte Carlo bucket to the right multiple and exit year (regression guard for the array-index refactor)", () => {
     // Certainty scenarios: every non-failed position lands in exactly one bucket, so the
     // random run should match the deterministic run almost exactly (no averaging noise).
-    for (const [shK, mulK, exK] of OUTCOMES.filter(([, mulK]) => mulK)) {
-      const p = { ...DEF, sh0: 0, sh2: 0, sh3: 0, sh4: 0, [shK]: 1 };
+    DEF.outcomes.forEach((_, idx) => {
+      const p = { ...DEF, sh0: 0, outcomes: DEF.outcomes.map((o, i) => ({ ...o, share: i === idx ? 1 : 0 })) };
       const det = run(p), mc = monte(p, 400);
       expect(mc.K.mean).toBeCloseTo(det.K.TVPI, 6);
       expect(mc.T.mean).toBeCloseTo(det.T.TVPI, 6);
-    }
+    });
   });
 });
