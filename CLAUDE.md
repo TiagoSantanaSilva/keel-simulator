@@ -24,7 +24,7 @@ See `docs/model-spec.md` for detail. Mirrors `Keel_Fund_Model.xlsx` (Inputs + Fu
 - Years are 0-indexed and mean "years after the initial check" directly; the UI labels them 1–12 to match the workbook.
 - Four outcome buckets (failure, solid, strong, outlier), each with its own share, multiple and exit year, rendered as a table (`OUTCOMES` in config.js) rather than sliders — not the old three-bucket ok/outlier/fail split.
 - Keel fee is one flat annual rate (`keelFee`) on the protected balance (`optK`) — a deliberate simplification of the workbook's tiered licence + banded annual fee, requested for a legible pricing control. See docs/model-spec.md for what that changes.
-- Redeemed capital is split between recycling into winners' next round (capped at `recCap` of the fund) and a direct LP distribution; the rest is written off along with unredeemed failures' `optK`.
+- Redeemed capital is split between recycling into winners' next round (uncapped) and a direct LP distribution; the rest is written off along with unredeemed failures' `optK`.
 - Waterfall: European, no hurdle.
 - No dilution/ownership/valuation-cap mechanics — outcomes pay a flat multiple on the check, matching the workbook. `roundVal` and `totalOpt` are informational only (founder view), not engine inputs.
 

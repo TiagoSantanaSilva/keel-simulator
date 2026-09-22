@@ -60,7 +60,7 @@ and when each one individually exits, which this expected-value model doesn't do
 | feePerPos | Keel's annual fee per position | `keelFee` × `optK` (a single flat annual rate on the protected balance) |
 | totalFees | Total Keel fees | convertedK × feePerPos × dConv + redeemedK × feePerPos × dRed |
 | recovered | Capital recovered via redemption | redeemedK × optK (100% of reserve yield goes to the company, so no yield boost on the fund's recovery) |
-| recycled | Recycled into winners' next round | min(recovered × recShare, F × recCap) |
+| recycled | Recycled into winners' next round | recovered × recShare (uncapped) |
 
 `convertedK` is every position that is *not* redeemed (successes plus unredeemed failures) —
 it keeps accruing the Keel fee until the conversion decision at year `dConv`.
@@ -72,9 +72,8 @@ it keeps accruing the Keel fee until the conversion decision at year `dConv`.
 - **SAFE + Keel:** NK checks split `safeK` / `optK`. A failure loses `safeK` outright; the
   `optK` share is redeemed (`redRate`) or lost. A success converts the *whole* check
   (`safeK` + `optK`) at the round's terms, discounted by `premium`. Capital recovered from
-  redemptions is split between recycling into winners' next round (up to `recCap` of the
-  fund) and a direct distribution to LPs. Keel fees come out of the follow-on reserve before
-  it's deployed.
+  redemptions is split between recycling into winners' next round (uncapped) and a direct
+  distribution to LPs. Keel fees come out of the follow-on reserve before it's deployed.
 
 Both strategies draw the follow-on reserve as the *same dollar amount* (a share of investable
 capital, not of either strategy's own check pool) — this is deliberate, matching the

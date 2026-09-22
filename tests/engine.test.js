@@ -2,42 +2,43 @@ import { describe, it, expect } from "vitest";
 import { DEF, OUTCOMES } from "../src/config.js";
 import { run, monte, irr, YR } from "../src/engine.js";
 
-// Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for one deliberate
-// deviation from the workbook: Keel pricing is a single flat annual reserve fee (`keelFee`)
-// instead of the workbook's tiered licence + banded annual fee, at the user's request for a
-// simpler pricing control. That drops the one-off licence fee ($10,000 in the workbook's base
-// case), so `feesK`/`writeOffK` are $10,000 lower than the workbook's own cached values, and
-// TVPI/IRR are fractionally higher. Everything else (cash-flow timing, waterfall, recycling)
-// still matches the workbook exactly. If a change moves these numbers on purpose, update them
-// here and say why in the commit.
+// Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for two deliberate
+// deviations from the workbook:
+// 1. Keel pricing is a single flat annual reserve fee (`keelFee`) instead of the workbook's
+//    tiered licence + banded annual fee, at the user's request for a simpler pricing control.
+//    That drops the one-off licence fee ($10,000 in the workbook's base case).
+// 2. Recycling has no cap (the workbook's `recCap` has been removed), at the user's request.
+//    The default recShare (50%) no longer gets capped at 15% of fund size, so recycled/
+//    distFromRedK are higher than an uncapped-vs-capped comparison would otherwise show.
+// If a change moves these numbers on purpose, update them here and say why in the commit.
 describe("deterministic engine, default inputs", () => {
   const r = run(DEF);
 
   it("matches the expected net TVPI", () => {
     expect(r.T.TVPI).toBeCloseTo(1.8128, 3);
-    expect(r.K.TVPI).toBeCloseTo(2.22464, 3);
+    expect(r.K.TVPI).toBeCloseTo(2.25344, 3);
   });
 
   it("matches the expected net IRR", () => {
     expect(r.T.irr).toBeCloseTo(0.1036283447, 3);
-    expect(r.K.irr).toBeCloseTo(0.1477961151, 3);
+    expect(r.K.irr).toBeCloseTo(0.1486333681, 3);
   });
 
   it("matches the expected gross multiple", () => {
     expect(r.grossMultipleT).toBeCloseTo(2.016, 2);
-    expect(r.grossMultipleK).toBeCloseTo(2.5308, 2);
+    expect(r.grossMultipleK).toBeCloseTo(2.5668, 2);
   });
 
   it("matches the expected DPI at year 4 and year 6", () => {
-    expect(r.K.dpi[3]).toBeCloseTo(0.2113636364, 3);
-    expect(r.K.dpi[5]).toBeCloseTo(0.202173913, 3);
+    expect(r.K.dpi[3]).toBeCloseTo(0.1909090909, 3);
+    expect(r.K.dpi[5]).toBeCloseTo(0.1826086957, 3);
   });
 
   it("matches the expected fees, recoveries and write-offs", () => {
     expect(r.feesK).toBeCloseTo(2020000, -1);
     expect(r.recoveredK).toBeCloseTo(16800000, -1);
-    expect(r.recycledK).toBeCloseTo(7500000, -1);
-    expect(r.distFromRedK).toBeCloseTo(9300000, -1);
+    expect(r.recycledK).toBeCloseTo(8400000, -1);
+    expect(r.distFromRedK).toBeCloseTo(8400000, -1);
     expect(r.writeOffT).toBeCloseTo(22400000, -1);
     expect(r.writeOffK).toBeCloseTo(7620000, -1);
   });
@@ -105,9 +106,9 @@ describe("model invariants", () => {
     expect(run({ ...DEF, redRate: 0.9 }).recoveredK).toBeGreaterThan(run(DEF).recoveredK);
   });
 
-  it("recycled capital is capped at the recycling cap (% of fund size)", () => {
-    const r = run({ ...DEF, redRate: 1, recShare: 1, recCap: 0.01 });
-    expect(r.recycledK).toBeCloseTo(DEF.F * 0.01, -1);
+  it("recycled capital is uncapped: recycled = recovered * recShare exactly", () => {
+    const r = run({ ...DEF, redRate: 1, recShare: 0.8 });
+    expect(r.recycledK).toBeCloseTo(r.recoveredK * 0.8, 0);
   });
 
   it("Keel fees never push the fund's total paid-in above what the fee formula implies", () => {

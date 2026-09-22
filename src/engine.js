@@ -50,7 +50,7 @@ export function derive(p){
   // All reserve yield goes to the company (see docs/model-spec.md), so redemption recovers
   // exactly the protected balance -- no yield boost on top.
   d.recovered=d.redeemedK*p.optK;
-  d.recycled=d.recovered>0?Math.min(d.recovered*p.recShare,p.F*p.recCap):0;
+  d.recycled=d.recovered*p.recShare;
   d.distFromRed=d.recovered-d.recycled;
   d.successK=d.NK*d.checkK*successMix(p);
   d.grossK=d.successK/(1+p.premium)+d.foReserveK*p.foMult+d.distFromRed+d.recycled*p.recMult;
@@ -190,7 +190,7 @@ export function monte(p,runs){
     const totalFees=d.licence+convertedK*d.feePerPos*p.dConv+redeemedK*d.feePerPos*p.dRed;
     const foReserveK=Math.max(0,d.foReserve-totalFees);
     const recovered=redeemedK*p.optK;
-    const recycled=recovered>0?Math.min(recovered*p.recShare,p.F*p.recCap):0;
+    const recycled=recovered*p.recShare;
     const distFromRed=recovered-recycled;
 
     const paidK=new Array(N).fill(0), distK=new Array(N).fill(0);
