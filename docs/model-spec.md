@@ -6,10 +6,14 @@ exception: it draws whole positions at random.
 
 Two strategies are compared, both funded from the same fund and the same outcome distribution:
 
-- **SAFE only:** every position is a single unprotected SAFE (`checkT`).
-- **SAFE + Option:** every position splits into an unprotected SAFE (`safeK`) plus a Keel
-  Option (`optK`). The Option redeems if the company fails (subject to the redemption rate)
-  and converts, at a possible valuation premium, if it succeeds.
+- **SAFE only:** every position is a single unprotected SAFE (`checkT`), independent of the
+  SAFE + Keel check size below.
+- **SAFE + Keel:** every position splits into an unprotected SAFE (`safeK`) plus a Keel Option
+  (`optK`). The Option redeems if the company fails (subject to the redemption rate) and
+  converts, at a possible valuation premium, if it succeeds. `roundVal` (round valuation) and
+  `totalOpt` (total Option amount across every protected investor in the round) are
+  informational only — shown in the founder view, and don't feed into either strategy's
+  returns, since the model has no cap-table/dilution mechanics.
 
 ## Timeline
 
@@ -23,7 +27,9 @@ workbook's own year numbering (its "year 1" is the year of the initial checks).
 - **Years 2 to `dRed`+1:** Keel charges its annual fee on positions still protected and
   awaiting a redemption decision. At year `dRed`+1, failed positions are redeemed (a share
   `redRate` of them) or written off (the rest).
-- **Year `foYear`+1:** the follow-on reserve is deployed (net of Keel fees, for SAFE + Option).
+- **Year `foYear`+1:** the follow-on reserve is deployed (net of Keel fees, for SAFE + Keel).
+  This reserve is sized identically for both strategies (see Strategies below) — it's the
+  most common source of "why did the SAFE-only number move?" confusion.
 - **Years `ex1`+1 to `ex4`+1:** each outcome bucket (returns capital, solid, strong, outlier)
   exits in its own year and pays out its multiple on the whole check.
 - **Year `foExit`+1:** the follow-on reserve exits at `foMult`.
@@ -37,11 +43,10 @@ workbook's own year numbering (its "year 1" is the year of the initial checks).
 | I | Investable capital | F × (1 − MF × MFY) |
 | checkPool | Capital for initial checks | I × (1 − reserve) |
 | foReserve | Follow-on reserve | I × reserve |
-| checkK | SAFE + Option check size | safeK + optK |
+| checkK | SAFE + Keel check size | safeK + optK |
 | NT, NK | Positions backed | checkPool / checkT, checkPool / checkK |
-| feePerPos | Keel's annual fee per position | tiered rate on `optK` (the protected balance), floored at `minFee` |
-| licence | Keel's one-off licence fee | tiered on `checkK` (first-commitment tiers) |
-| totalFees | Total Keel fees | licence + convertedK × feePerPos × dConv + redeemedK × feePerPos × dRed |
+| feePerPos | Keel's annual fee per position | `keelFee` × `optK` (a single flat annual rate on the protected balance) |
+| totalFees | Total Keel fees | convertedK × feePerPos × dConv + redeemedK × feePerPos × dRed |
 | recovered | Capital recovered via redemption | redeemedK × optK × (1 + yld × yldInv × dRed) |
 | recycled | Recycled into winners' next Series A | min(recovered × recShare, F × recCap) |
 
@@ -52,12 +57,22 @@ it keeps accruing the Keel fee until the conversion decision at year `dConv`.
 
 - **SAFE only:** NT checks of `checkT`. Failures return nothing. The follow-on reserve exits
   at `foMult`.
-- **SAFE + Option:** NK checks split `safeK` / `optK`. A failure loses `safeK` outright; the
+- **SAFE + Keel:** NK checks split `safeK` / `optK`. A failure loses `safeK` outright; the
   `optK` share is redeemed (`redRate`) or lost. A success converts the *whole* check
   (`safeK` + `optK`) at the round's terms, discounted by `premium`. Capital recovered from
   redemptions is split between recycling into winners' next Series A (up to `recCap` of the
   fund) and a direct distribution to LPs. Keel fees come out of the follow-on reserve before
   it's deployed.
+
+Both strategies draw the follow-on reserve as the *same dollar amount* (a share of investable
+capital, not of either strategy's own check pool) — this is deliberate, matching the
+workbook's own rationale ("both funds hold the same follow-on reserve ... so the comparison is
+fair"), and it's why moving the `reserve` slider visibly changes the SAFE-only side too.
+
+**Pricing deviates from the workbook by design.** `Keel_Fund_Model.xlsx` prices Keel with a
+tiered one-off licence fee plus a banded annual rate. This app instead exposes one flat annual
+rate, `keelFee`, applied to `optK` — a deliberate simplification requested to make the pricing
+control legible, at the cost of the workbook's one-off licence fee ($10,000 in its base case).
 
 ## Marks (NAV)
 
@@ -84,7 +99,9 @@ purely from the cash-flow rows below, matching the workbook exactly.
 - **TVPI** = DPI + RVPI, net of carry. Equals DPI once every position has exited.
 - **Gross multiple** = total proceeds (before fees and carry) / fund size.
 - **Net IRR** on yearly LP cash flows (contributions negative, distributions positive); the
-  solver returns the root closest to zero.
+  solver returns the root closest to zero. **IRR to date** (`irrToDate[i]`) is the same solve
+  restricted to years 0..i — it's `NaN` for any year before the first LP distribution, since
+  there's no sign change yet to find a root from.
 - **Waterfall:** European, no hurdle. LPs receive all commitments first, then (1 − carry) of
   the rest.
 

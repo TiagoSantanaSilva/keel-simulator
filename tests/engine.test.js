@@ -2,38 +2,44 @@ import { describe, it, expect } from "vitest";
 import { DEF } from "../src/config.js";
 import { run, monte, irr, grid, YR } from "../src/engine.js";
 
-// Baseline values from Keel_Fund_Model.xlsx (Fund Model tab) for the default inputs.
-// If a change moves these numbers on purpose, update them here and say why in the commit.
+// Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for one deliberate
+// deviation from the workbook: Keel pricing is a single flat annual reserve fee (`keelFee`)
+// instead of the workbook's tiered licence + banded annual fee, at the user's request for a
+// simpler pricing control. That drops the one-off licence fee ($10,000 in the workbook's base
+// case), so `feesK`/`writeOffK` are $10,000 lower than the workbook's own cached values, and
+// TVPI/IRR are fractionally higher. Everything else (cash-flow timing, waterfall, recycling)
+// still matches the workbook exactly. If a change moves these numbers on purpose, update them
+// here and say why in the commit.
 describe("deterministic engine, default inputs", () => {
   const r = run(DEF);
 
-  it("matches the spreadsheet's net TVPI", () => {
+  it("matches the expected net TVPI", () => {
     expect(r.T.TVPI).toBeCloseTo(1.8128, 3);
-    expect(r.K.TVPI).toBeCloseTo(2.22416, 3);
+    expect(r.K.TVPI).toBeCloseTo(2.22464, 3);
   });
 
-  it("matches the spreadsheet's net IRR", () => {
+  it("matches the expected net IRR", () => {
     expect(r.T.irr).toBeCloseTo(0.1036283447, 3);
-    expect(r.K.irr).toBeCloseTo(0.1477445992, 3);
+    expect(r.K.irr).toBeCloseTo(0.1477961151, 3);
   });
 
-  it("matches the spreadsheet's gross multiple", () => {
+  it("matches the expected gross multiple", () => {
     expect(r.grossMultipleT).toBeCloseTo(2.016, 2);
-    expect(r.grossMultipleK).toBeCloseTo(2.5302, 2);
+    expect(r.grossMultipleK).toBeCloseTo(2.5308, 2);
   });
 
-  it("matches the spreadsheet's DPI at year 4 and year 6", () => {
+  it("matches the expected DPI at year 4 and year 6", () => {
     expect(r.K.dpi[3]).toBeCloseTo(0.2113636364, 3);
     expect(r.K.dpi[5]).toBeCloseTo(0.202173913, 3);
   });
 
-  it("matches the spreadsheet's fees, recoveries and write-offs", () => {
-    expect(r.feesK).toBeCloseTo(2030000, -1);
+  it("matches the expected fees, recoveries and write-offs", () => {
+    expect(r.feesK).toBeCloseTo(2020000, -1);
     expect(r.recoveredK).toBeCloseTo(16800000, -1);
     expect(r.recycledK).toBeCloseTo(7500000, -1);
     expect(r.distFromRedK).toBeCloseTo(9300000, -1);
     expect(r.writeOffT).toBeCloseTo(22400000, -1);
-    expect(r.writeOffK).toBeCloseTo(7630000, -1);
+    expect(r.writeOffK).toBeCloseTo(7620000, -1);
   });
 
   it("calls exactly the fund size from LPs in every strategy", () => {
@@ -56,11 +62,27 @@ describe("deterministic engine, default inputs", () => {
   it("has 12 years, labelled 1 to 12", () => {
     expect(YR).toEqual([1,2,3,4,5,6,7,8,9,10,11,12]);
   });
+
+  it("computes an IRR-to-date for every year, converging to the final IRR", () => {
+    for (const k of ["T", "K"]) {
+      expect(r[k].irrToDate.length).toBe(12);
+      expect(r[k].irrToDate.at(-1)).toBeCloseTo(r[k].irr, 6);
+    }
+  });
+});
+
+describe("informational-only inputs", () => {
+  it("round valuation and total Option amount don't affect returns", () => {
+    const base = run(DEF);
+    const r = run({ ...DEF, roundVal: 25e6, totalOpt: 5e6 });
+    expect(r.T.TVPI).toBeCloseTo(base.T.TVPI, 9);
+    expect(r.K.TVPI).toBeCloseTo(base.K.TVPI, 9);
+  });
 });
 
 describe("model invariants", () => {
   it("Keel equals SAFE only when the whole check is unprotected and there are no fees", () => {
-    const p = { ...DEF, safeK: DEF.safeK + DEF.optK, optK: 0, checkT: DEF.safeK + DEF.optK, minFee: 0, lic1: 0, lic2: 0, lic3: 0 };
+    const p = { ...DEF, safeK: DEF.safeK + DEF.optK, optK: 0, checkT: DEF.safeK + DEF.optK, keelFee: 0 };
     const r = run(p);
     expect(r.K.TVPI).toBeCloseTo(r.T.TVPI, 6);
   });

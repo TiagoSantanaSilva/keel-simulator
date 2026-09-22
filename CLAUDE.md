@@ -19,13 +19,14 @@ A simulator for Keel (keel.sale), which licenses principal-protected financing i
 
 See `docs/model-spec.md` for detail. Mirrors `Keel_Fund_Model.xlsx` (Inputs + Fund Model tabs).
 
-- Two strategies: SAFE only (one unprotected check, `checkT`) vs SAFE + Option (`safeK` unprotected + `optK` protected, sized independently of `checkT`). No "waiting" strategy.
+- Two strategies: SAFE only (one unprotected check, `checkT`) vs SAFE + Keel (`safeK` unprotected + `optK` protected, sized independently of `checkT`). No "waiting" strategy.
+- `src/config.js`'s `G` groups each carry a `section` (`shared`, `T`, `K`) that `main.js` renders as a colour-coded header. Keep new inputs in the right section — shared inputs move both strategies' numbers, which is intentional (the follow-on reserve is the recurring point of confusion; it's explicitly shared so the comparison is fair, per the workbook's own Read Me tab).
 - Years are 0-indexed and mean "years after the initial check" directly; the UI labels them 1–12 to match the workbook.
-- Five outcome buckets (failure, returns capital, solid, strong, outlier), each with its own share, multiple and exit year — not the old three-bucket ok/outlier/fail split.
-- Keel fee: tiered annual rate on the protected balance (`optK`) plus a one-off licence tiered on the whole SAFE + Option check, both from `src/config.js`'s pricing inputs.
+- Five outcome buckets (failure, returns capital, solid, strong, outlier), each with its own share, multiple and exit year, rendered as a table (`OUTCOMES` in config.js) rather than sliders — not the old three-bucket ok/outlier/fail split.
+- Keel fee is one flat annual rate (`keelFee`) on the protected balance (`optK`) — a deliberate simplification of the workbook's tiered licence + banded annual fee, requested for a legible pricing control. See docs/model-spec.md for what that changes.
 - Redeemed capital is split between recycling into winners' next Series A (capped at `recCap` of the fund) and a direct LP distribution; the rest is written off along with unredeemed failures' `optK`.
 - Waterfall: European, no hurdle.
-- No dilution/ownership/valuation-cap mechanics — outcomes pay a flat multiple on the check, matching the workbook.
+- No dilution/ownership/valuation-cap mechanics — outcomes pay a flat multiple on the check, matching the workbook. `roundVal` and `totalOpt` are informational only (founder view), not engine inputs.
 
 ## Ideas backlog
 

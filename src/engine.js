@@ -37,9 +37,9 @@ export function derive(p){
   d.failedK=d.NK*p.sh0;
   d.redeemedK=d.failedK*p.redRate;
   d.convertedK=d.NK-d.redeemedK;
-  d.feePerPos=Math.max(p.minFee,Math.min(p.optK,p.band1)*p.rate1+Math.max(0,Math.min(p.optK,p.band2)-p.band1)*p.rate2+Math.max(0,p.optK-p.band2)*p.rate3);
-  d.licence=d.checkK<p.licT1?p.lic1:(d.checkK<=p.licT2?p.lic2:p.lic3);
-  d.totalFees=d.licence+d.convertedK*d.feePerPos*p.dConv+d.redeemedK*d.feePerPos*p.dRed;
+  d.feePerPos=p.keelFee*p.optK;
+  d.licence=0;
+  d.totalFees=d.convertedK*d.feePerPos*p.dConv+d.redeemedK*d.feePerPos*p.dRed;
   d.foReserveK=Math.max(0,d.foReserve-d.totalFees);
   d.recovered=d.redeemedK*p.optK*(1+p.yld*p.yldInv*p.dRed);
   d.recycled=d.recovered>0?Math.min(d.recovered*p.recShare,p.F*p.recCap):0;
@@ -73,6 +73,7 @@ export function metrics(p,paid,dist,nav){
   }
   o.irr=irr(o.net);
   o.TVPI=o.tvpi[N-1];
+  o.irrToDate=[]; for(let i=0;i<N;i++) o.irrToDate[i]=irr(o.net.slice(0,i+1));
   return o;
 }
 

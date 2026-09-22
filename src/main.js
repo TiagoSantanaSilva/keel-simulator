@@ -1,6 +1,6 @@
 import "./styles.css";
 import * as XLSX from "xlsx";
-import { G, DEF, PRESETS } from "./config.js";
+import { G, DEF, PRESETS, OUTCOMES } from "./config.js";
 import { fmt } from "./format.js";
 import { YR, run, monte, STRONG_MULTS, OUTLIER_MULTS, grid } from "./engine.js";
 
@@ -13,11 +13,22 @@ let preset = "Your base case";
 
 /* ---------------- controls ---------------- */
 const $=id=>document.getElementById(id);
+const SECTION={shared:["Shared assumptions","Same for both strategies, so the comparison is fair."],
+  T:["SAFE only",null],K:["SAFE + Keel",null]};
 function buildControls(){
   const host=$("controls"); host.innerHTML="";
+  let curSection=null;
   G.forEach(g=>{
-    const det=document.createElement("details"); det.className="grp"; if(g.open) det.open=true;
+    if(g.section!==curSection){
+      curSection=g.section;
+      const [label,note]=SECTION[curSection];
+      const hdr=document.createElement("div"); hdr.className="secthdr sect-"+curSection;
+      hdr.innerHTML=`<span>${label}</span>${note?`<small>${note}</small>`:""}`;
+      host.appendChild(hdr);
+    }
+    const det=document.createElement("details"); det.className="grp sect-"+g.section; if(g.open) det.open=true;
     det.innerHTML=`<summary>${g.title}</summary>`;
+    if(g.id==="out"){ det.appendChild(buildOutcomesTable()); host.appendChild(det); return }
     g.f.forEach(([k,label,min,max,step,f,hint])=>{
       const w=document.createElement("div"); w.className="field";
       const id="in_"+k;
@@ -31,9 +42,43 @@ function buildControls(){
     host.appendChild(det);
   });
   G.forEach(g=>g.f.forEach(([k,,,,,f])=>paintOut(k,f)));
+  paintOutcomesTable();
+}
+function buildOutcomesTable(){
+  const wrap=document.createElement("div"); wrap.className="outwrap";
+  let h=`<table class="outtbl"><thead><tr><th>Outcome</th><th>Share</th><th>Multiple</th><th>Exit year</th></tr></thead><tbody>`;
+  OUTCOMES.forEach(([shK,mulK,exK,label,hint])=>{
+    h+=`<tr><td>${label}${hint?`<div class="hint">${hint}</div>`:""}</td>
+      <td><input type="number" class="cell" id="in_${shK}" min="0" max="100" step="1" value="${Math.round(S[shK]*100)}"> %</td>
+      <td>${mulK?`<input type="number" class="cell" id="in_${mulK}" min="0" max="500" step="0.5" value="${S[mulK]}">x`:"—"}</td>
+      <td>${exK?`<input type="number" class="cell" id="in_${exK}" min="1" max="11" step="1" value="${S[exK]}">`:"—"}</td></tr>`;
+  });
+  h+=`</tbody><tfoot><tr><td>Total</td><td id="outtotal" colspan="3"></td></tr></tfoot></table>`;
+  wrap.innerHTML=h;
+  OUTCOMES.forEach(([shK,mulK,exK])=>{
+    wrap.querySelector("#in_"+shK).addEventListener("input",e=>{S[shK]=parseFloat(e.target.value||0)/100; markPreset(null); paintOutcomesTable(); schedule()});
+    if(mulK) wrap.querySelector("#in_"+mulK).addEventListener("input",e=>{S[mulK]=parseFloat(e.target.value||0); markPreset(null); schedule()});
+    if(exK) wrap.querySelector("#in_"+exK).addEventListener("input",e=>{S[exK]=parseFloat(e.target.value||0); markPreset(null); schedule()});
+  });
+  return wrap;
+}
+function paintOutcomesTable(){
+  const sum=OUTCOMES.reduce((a,[shK])=>a+S[shK],0);
+  const el=$("outtotal"); if(!el) return;
+  const ok=Math.abs(sum-1)<0.001;
+  el.textContent=(sum*100).toFixed(0)+"%"+(ok?" ✓ matches 100%":" ✗ should be 100%");
+  el.className=ok?"ok":"bad";
 }
 function paintOut(k,f){const o=$("o_"+k); if(o) o.textContent=fmt[f](S[k])}
-function syncControls(){G.forEach(g=>g.f.forEach(([k,,,,,f])=>{const i=$("in_"+k); if(i) i.value=S[k]; paintOut(k,f)}))}
+function syncControls(){
+  G.forEach(g=>g.f.forEach(([k,,,,,f])=>{const i=$("in_"+k); if(i) i.value=S[k]; paintOut(k,f)}));
+  OUTCOMES.forEach(([shK,mulK,exK])=>{
+    const si=$("in_"+shK); if(si) si.value=Math.round(S[shK]*100);
+    if(mulK){const mi=$("in_"+mulK); if(mi) mi.value=S[mulK]}
+    if(exK){const ei=$("in_"+exK); if(ei) ei.value=S[exK]}
+  });
+  paintOutcomesTable();
+}
 function buildPresets(){
   const h=$("presets"); h.innerHTML="";
   Object.keys(PRESETS).forEach(n=>{const b=document.createElement("button");b.type="button";b.textContent=n;
@@ -43,7 +88,7 @@ function buildPresets(){
 function markPreset(n){preset=n;[...$("presets").children].forEach(b=>b.setAttribute("aria-pressed",String(b.textContent===n)))}
 
 /* ---------------- rendering ---------------- */
-const COL={T:"var(--trad)",K:"var(--keel)"}, NAME={T:"SAFE only",K:"SAFE + Option"};
+const COL={T:"var(--trad)",K:"var(--keel)"}, NAME={T:"SAFE only",K:"SAFE + Keel"};
 let chartKey="tvpi", heatKey="best", cfKey="K", last=null, lastMC=null, lastGrid=null;
 
 function renderHull(r){
@@ -57,6 +102,7 @@ function renderHull(r){
       <div class="val" style="color:${COL[k]}">${v.toFixed(2)}x</div></div>`});
   const ticks=[0,.5,1,1.5,2,3,4,5,6,8,10].filter(v=>v<=max);
   h+=`<div class="scale"><div></div><div class="ticks">${ticks.map(v=>`<span style="left:${pos(v)}%">${v===1?'<span class="wl-label">1.0x</span>':v+"x"}</span>`).join("")}</div><div></div></div>`;
+  h+=`<div class="hulldef">Net TVPI: for every $1 an LP put in, what they'd have back today — cash already distributed plus the value of what's still held — after Keel fees, management fees and carry. 1.0x is the dashed line: below it, LPs haven't got their money back yet.</div>`;
   $("hull").innerHTML=h;
   $("headline").textContent=`What a ${fmt.usd(r.p.F)} seed fund returns to its LPs`;
 }
@@ -71,7 +117,7 @@ function renderStats(r){
     ["Seed positions backed","Expected number of companies funded from the initial check pool.",(o,k)=>k==="T"?r.d.NT:r.d.NK,v=>v.toFixed(1)],
   ];
   let h=s.map(([t,def,fn,f])=>`<div class="stat"><h3>${t}</h3><div class="kpidef">${def}</div>${trio(r,fn,f)}</div>`).join("");
-  h+=`<div class="stat"><h3>Keel: recovered from failures</h3><div class="kpidef">Redeemed protected capital, split between recycling and LP distributions.</div><div style="font-size:18px;font-weight:700" class="k">${fmt.usd(r.recoveredK)}</div><div class="hint" style="font-size:12px;color:var(--muted)">${fmt.usd(r.recycledK)} recycled into winners' next Series A, ${fmt.usd(r.distFromRedK)} paid out, ${fmt.usd(r.feesK)} in Keel fees</div></div>`;
+  h+=`<div class="stat"><h3>Keel: recovered from failures</h3><div class="kpidef">Redeemed protected capital, split between recycling and an LP distribution.</div><div style="font-size:18px;font-weight:700" class="k">${fmt.usd(r.recoveredK)}</div><div class="hint" style="font-size:12px;color:var(--muted)">${fmt.usd(r.recycledK)} recycled into winners' next Series A, ${fmt.usd(r.distFromRedK)} distributed to LPs, ${fmt.usd(r.feesK)} in Keel fees</div></div>`;
   $("stats").innerHTML=h;
 }
 function tabs(host,items,cur,onPick){
@@ -81,7 +127,7 @@ function tabs(host,items,cur,onPick){
 }
 function lineChart(host,series,yfmt,zeroLine){
   const W=760,H=300,m={l:58,r:14,t:12,b:28};
-  const all=series.flatMap(s=>s.v); let lo=Math.min(0,...all), hi=Math.max(...all,zeroLine||0); if(hi===lo) hi=lo+1;
+  const all=series.flatMap(s=>s.v).filter(v=>!isNaN(v)); let lo=Math.min(0,...all), hi=Math.max(...all,zeroLine||0); if(hi===lo) hi=lo+1;
   const raw=(hi-lo)/5, mag=Math.pow(10,Math.floor(Math.log10(raw))), step=[1,2,2.5,5,10].map(f=>f*mag).find(s=>s>=raw);
   lo=Math.floor(lo/step)*step; hi=Math.ceil(hi/step)*step; const nt=Math.round((hi-lo)/step);
   const x=i=>m.l+i*(W-m.l-m.r)/(YR.length-1), y=v=>m.t+(hi-v)*(H-m.t-m.b)/(hi-lo);
@@ -89,22 +135,28 @@ function lineChart(host,series,yfmt,zeroLine){
   for(let i=0;i<=nt;i++){const v=lo+i*step; g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${yfmt(v)}</text>`}
   if(zeroLine!==undefined && zeroLine>lo && zeroLine<hi) g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(zeroLine)}" y2="${y(zeroLine)}" stroke="var(--water)" stroke-dasharray="5 4" stroke-width="1.5"/>`;
   YR.forEach((t,i)=>g+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle">${t}</text>`);
-  series.forEach(s=>{g+=`<polyline fill="none" stroke="${s.c}" stroke-width="2.5" stroke-linejoin="round" points="${s.v.map((v,i)=>x(i)+","+y(v)).join(" ")}"/>`;
-    s.v.forEach((v,i)=>g+=`<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="${s.c}"/>`)});
+  series.forEach(s=>{
+    // Break into contiguous runs of finite values so a leading NaN (e.g. IRR before any cash returns) leaves a gap, not a bogus line to/from 0.
+    let run=[];
+    const flush=()=>{if(run.length>1) g+=`<polyline fill="none" stroke="${s.c}" stroke-width="2.5" stroke-linejoin="round" points="${run.map(([px,py])=>px+","+py).join(" ")}"/>`; run=[]};
+    s.v.forEach((v,i)=>{if(isNaN(v)){flush()}else{run.push([x(i),y(v)]); g+=`<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="${s.c}"/>`}});
+    flush();
+  });
   g+=`<rect id="hov" x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent"/>`;
   const el=$(host); el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Chart by year">${g}</svg>`;
   const svg=el.querySelector("svg"), tip=$("tip");
   svg.addEventListener("mousemove",ev=>{const b=svg.getBoundingClientRect(), px=(ev.clientX-b.left)*W/b.width, i=Math.round((px-m.l)/((W-m.l-m.r)/(YR.length-1)));
     if(i<0||i>=YR.length){tip.style.display="none";return}
-    tip.innerHTML=`Year ${YR[i]}<br>`+series.map(s=>`${s.n}: ${yfmt(s.v[i],true)}`).join("<br>");
+    tip.innerHTML=`Year ${YR[i]}<br>`+series.map(s=>`${s.n}: ${isNaN(s.v[i])?"n/a":yfmt(s.v[i],true)}`).join("<br>");
     const box=el.parentElement.getBoundingClientRect(); tip.style.left=(b.left-box.left+x(i)*b.width/W)+"px"; tip.style.top=(b.top-box.top+m.t*b.height/H+20)+"px"; tip.style.display="block"});
   svg.addEventListener("mouseleave",()=>tip.style.display="none");
 }
 function renderChart(r){
-  const opts=[["tvpi","TVPI"],["dpi","DPI"],["rvpi","RVPI"],["moic","Gross MOIC"],["cnet","J-curve"]];
+  const opts=[["tvpi","TVPI"],["dpi","DPI"],["rvpi","RVPI"],["moic","Gross MOIC"],["irrToDate","IRR to date"],["cnet","J-curve"]];
   tabs("chartTabs",opts,chartKey,k=>{chartKey=k;renderChart(last)});
-  const money=chartKey==="cnet";
-  lineChart("chart",["T","K"].map(k=>({n:NAME[k],c:COL[k],v:r[k][chartKey]})),(v,full)=>money?(full?fmt.usdFull(v):fmt.usd(v)):v.toFixed(2)+"x",money?0:1);
+  const money=chartKey==="cnet", pctv=chartKey==="irrToDate";
+  const yfmt=(v,full)=>money?(full?fmt.usdFull(v):fmt.usd(v)):pctv?(v*100).toFixed(1)+"%":v.toFixed(2)+"x";
+  lineChart("chart",["T","K"].map(k=>({n:NAME[k],c:COL[k],v:r[k][chartKey]})),yfmt,money||pctv?0:1);
 }
 function renderHist(mc){
   const W=760,H=240,m={l:40,r:14,t:10,b:30};
@@ -125,7 +177,7 @@ function renderHist(mc){
     <dt>Average net IRR</dt><dd>${isNaN(s.irrMean)?"n/a":(s.irrMean*100).toFixed(1)+"%"}</dd></dl></div>`}).join("");
 }
 function renderHeat(g){
-  tabs("heatTabs",[["best","Best strategy"],["kt","SAFE + Option vs SAFE only"]],heatKey,k=>{heatKey=k;renderHeat(lastGrid)});
+  tabs("heatTabs",[["best","Best strategy"],["kt","SAFE + Keel vs SAFE only"]],heatKey,k=>{heatKey=k;renderHeat(lastGrid)});
   let h=`<table><thead><tr><th>'Strong' multiple \\ outlier multiple</th>${OUTLIER_MULTS.map(v=>`<th>${v}x</th>`).join("")}</tr></thead><tbody>`;
   g.forEach((row,i)=>{h+=`<tr><th>${STRONG_MULTS[i]}x</th>`;row.forEach((c,j)=>{
     const cur=STRONG_MULTS[i]===S.mul3&&OUTLIER_MULTS[j]===S.mul4?" cur":"";
@@ -137,12 +189,13 @@ function renderHeat(g){
   $("heat").innerHTML=h+"</tbody></table>";
 }
 function renderFounder(){
-  const p=S, keepConv=1-p.redRate;
+  const p=S, keepConv=1-p.redRate, dil=v=>p.roundVal?v/p.roundVal:0;
   const cards=[
-    ["Normal round (SAFE only)",[["Cash at close",p.checkT],["Total capital received",p.checkT]]],
-    ["SAFE + Option round, company succeeds",[["Cash at close",p.safeK],["Option converts after "+p.dConv+" years",p.optK],["Total capital received",p.safeK+p.optK],["Yield received over "+p.dConv+" years",p.yld*p.optK*p.dConv*(1-p.yldInv)]]],
-    ["SAFE + Option round, company fails",[["Cash at close",p.safeK],["Redeemed by investors after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["Total capital received",p.safeK+p.optK*keepConv],["Yield received over "+p.dRed+" years",p.yld*p.optK*p.dRed*(1-p.yldInv)]]]];
-  $("founder").innerHTML=cards.map(([t,rows])=>`<div class="founder"><h3 style="margin:0 0 10px;font-size:15px">${t}</h3><dl>${rows.map(([a,v])=>`<dt>${a}</dt><dd>${fmt.usdFull(v)}</dd>`).join("")}</dl></div>`).join("");
+    ["Normal round (SAFE only)",[["Cash at close",p.checkT],["Total capital received",p.checkT],["Dilution at this round's valuation",dil(p.checkT),"pct"]]],
+    ["SAFE + Keel round, company succeeds",[["Cash at close",p.safeK],["Option converts after "+p.dConv+" years",p.optK],["Total capital received",p.safeK+p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["Yield received over "+p.dConv+" years",p.yld*p.optK*p.dConv*(1-p.yldInv)]]],
+    ["SAFE + Keel round, company fails",[["Cash at close",p.safeK],["Redeemed by investors after "+p.dRed+" years",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["Total capital received",p.safeK+p.optK*keepConv],["Yield received over "+p.dRed+" years",p.yld*p.optK*p.dRed*(1-p.yldInv)]]],
+    ["Across the whole round",[["Round valuation (post-money)",p.roundVal],["Total Option amount in the round",p.totalOpt],["This fund's share of the Option pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of protected investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"]]]];
+  $("founder").innerHTML=cards.map(([t,rows])=>`<div class="founder"><h3 style="margin:0 0 10px;font-size:15px">${t}</h3><dl>${rows.map(([a,v,f])=>`<dt>${a}</dt><dd>${f==="pct"?fmt.pct1(v):f==="n"?v.toFixed(1):fmt.usdFull(v)}</dd>`).join("")}</dl></div>`).join("");
 }
 function cfRows(o){
   const rows=[];Object.entries(o.rows).forEach(([k,v])=>rows.push([k,v,"usd"]));
@@ -151,7 +204,7 @@ function cfRows(o){
   return rows;
 }
 function renderCF(r){
-  tabs("cfTabs",[["T","SAFE only"],["K","SAFE + Option"]],cfKey,k=>{cfKey=k;renderCF(last)});
+  tabs("cfTabs",[["T","SAFE only"],["K","SAFE + Keel"]],cfKey,k=>{cfKey=k;renderCF(last)});
   const o=r[cfKey], rows=cfRows(o);
   $("cfirr").innerHTML=`Net IRR: <b>${isNaN(o.irr)?"n/a":(o.irr*100).toFixed(1)+"%"}</b> &middot; Net TVPI: <b>${o.TVPI.toFixed(2)}x</b>`;
   $("cf").innerHTML=`<thead><tr><th>${NAME[cfKey]}</th>${YR.map(t=>`<th>Year ${t}</th>`).join("")}</tr></thead><tbody>`+
@@ -172,17 +225,24 @@ function buildWorkbook(){
   const wb=XLSX.utils.book_new();
 
   const inputRows=[["Keel fund simulator export"],[],["INPUTS","Value"]];
-  G.forEach(grp=>grp.f.forEach(([k,label])=>inputRows.push([label,S[k]])));
+  G.forEach(grp=>{
+    if(grp.id==="out"){OUTCOMES.forEach(([shK,mulK,exK,label])=>{
+      inputRows.push([label+": share",S[shK]]);
+      if(mulK) inputRows.push([label+": multiple",S[mulK]]);
+      if(exK) inputRows.push([label+": exit year",S[exK]]);
+    }); return}
+    grp.f.forEach(([k,label])=>inputRows.push([label,S[k]]));
+  });
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(inputRows),"Inputs");
 
-  const results=[["RESULTS","SAFE only","SAFE + Option"],
+  const results=[["RESULTS","SAFE only","SAFE + Keel"],
     ["Net TVPI",r.T.TVPI,r.K.TVPI],["Net IRR",r.T.irr,r.K.irr],["Gross multiple",r.grossMultipleT,r.grossMultipleK],
     ["DPI at year 4",r.T.dpi[3],r.K.dpi[3]],["RVPI at year 4",r.T.rvpi[3],r.K.rvpi[3]],
     ["DPI at year 6",r.T.dpi[5],r.K.dpi[5]],["RVPI at year 6",r.T.rvpi[5],r.K.rvpi[5]],
     ["Capital lost in failures",r.writeOffT,r.writeOffK],["Seed positions backed",r.d.NT,r.d.NK],
     [],["KEEL DETAIL","",""],["Recovered from failures","",r.recoveredK],["Recycled into winners' next Series A","",r.recycledK],
     ["Distributed to LPs from redemptions","",r.distFromRedK],["Total Keel fees","",r.feesK],["Keel fees as % of fund","",r.feesPctK]];
-  if(mc){ results.push([],[`SIMULATION (${mc.runs} funds, net TVPI)`,"SAFE only","SAFE + Option"]);
+  if(mc){ results.push([],[`SIMULATION (${mc.runs} funds, net TVPI)`,"SAFE only","SAFE + Keel"]);
     [["Chance LPs lose money","loss"],["Worst 10%","p10"],["Median","p50"],["Best 10%","p90"],["Average","mean"],["Average net IRR","irrMean"]]
       .forEach(([l,k])=>results.push([l,mc.T[k],mc.K[k]])); }
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(results),"Results");
@@ -193,7 +253,7 @@ function buildWorkbook(){
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Cash flows - "+NAME[k]);
   });
 
-  if(g){ const gridRows=[["'Strong' exit \\ outlier exit",...OUTLIER_MULTS.map(v=>v+"x (SAFE only / SAFE+Option)")]];
+  if(g){ const gridRows=[["'Strong' exit \\ outlier exit",...OUTLIER_MULTS.map(v=>v+"x (SAFE only / SAFE+Keel)")]];
     g.forEach((row,i)=>gridRows.push([STRONG_MULTS[i]+"x",...row.map(c=>`${c.T.toFixed(2)} / ${c.K.toFixed(2)}`)]));
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(gridRows),"Exit-size grid"); }
 
