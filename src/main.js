@@ -6,7 +6,11 @@ import { YR, run, monte } from "./engine.js";
 
 // Bump whenever the input schema changes shape or meaning, so a stale save from an
 // older version of the model isn't silently merged onto new defaults.
-const SCHEMA_VERSION = 2;
+// Bumped from 2: the engine's follow-on/recycled/fee-timing assumptions changed enough
+// (per-bucket allocation, foStepUp, fee timing fix) that a saved input set tuned against
+// the old model could quietly mean something different now -- reset returning visitors to
+// fresh, model-appropriate defaults rather than silently reinterpreting old values.
+const SCHEMA_VERSION = 3;
 
 // DEF.outcomes is an array of objects -- a plain Object.assign would copy the reference,
 // not the contents, so editing a row in S would silently mutate the shared default too.
@@ -138,7 +142,7 @@ function trio(r,fn,f){return `<div class="trio">${["T","K"].map(k=>`<div><i>${NA
 function renderStats(r){
   const s=[
     ["Net IRR","Annualised return to LPs, after fees and carry.",o=>o.irr,v=>isNaN(v)?"n/a":(v*100).toFixed(1)+"%"],
-    ["Gross multiple on committed capital","Total proceeds before fees and carry, divided by fund size.",(o,k)=>k==="T"?r.grossMultipleT:r.grossMultipleK,fmt.x],
+    ["Gross TVPI","Total proceeds before fees and carry, divided by fund size (committed capital, not capital actually invested).",(o,k)=>k==="T"?r.grossMultipleT:r.grossMultipleK,fmt.x],
     ["DPI / RVPI at year 4","Cash already distributed vs. unrealised value, per dollar paid in.",o=>o,o=>o.dpi[3].toFixed(2)+" / "+o.rvpi[3].toFixed(2)],
     ["DPI / RVPI at year 6","Same, four years further into the fund's life.",o=>o,o=>o.dpi[5].toFixed(2)+" / "+o.rvpi[5].toFixed(2)],
     ["Capital lost in failures","Principal not recovered when a company fails (Keel: after fees).",(o,k)=>k==="T"?r.writeOffT:r.writeOffK,fmt.usd],
@@ -169,11 +173,12 @@ function lineChart(host,series,yfmt,zeroLine){
   for(let i=0;i<=nt;i++){const v=lo+i*step; g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${yfmt(v)}</text>`}
   if(zeroLine!==undefined && zeroLine>lo && zeroLine<hi) g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(zeroLine)}" y2="${y(zeroLine)}" stroke="var(--water)" stroke-dasharray="5 4" stroke-width="1.5"/>`;
   YR.forEach((t,i)=>g+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle">${t}</text>`);
+  const midY=m.t+(H-m.t-m.b)/2;
   series.forEach(s=>{
     // Break into contiguous runs of finite values so a leading NaN (e.g. IRR before any cash returns) leaves a gap, not a bogus line to/from 0.
     let run=[];
     const flush=()=>{if(run.length>1) g+=`<polyline fill="none" stroke="${s.c}" stroke-width="2.5" stroke-linejoin="round" points="${run.map(([px,py])=>px+","+py).join(" ")}"/>`; run=[]};
-    s.v.forEach((v,i)=>{if(isNaN(v)){flush()}else{run.push([x(i),y(v)]); g+=`<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="${s.c}"/>`}});
+    s.v.forEach((v,i)=>{if(isNaN(v)){flush(); g+=`<text x="${x(i)}" y="${midY+4}" text-anchor="middle" style="fill:var(--muted)">–</text>`}else{run.push([x(i),y(v)]); g+=`<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="${s.c}"/>`}});
     flush();
   });
   g+=`<rect id="hov" x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent"/>`;
@@ -186,11 +191,18 @@ function lineChart(host,series,yfmt,zeroLine){
   svg.addEventListener("mouseleave",()=>tip.style.display="none");
 }
 function renderChart(r){
-  const opts=[["tvpi","TVPI"],["dpi","DPI"],["rvpi","RVPI"],["moic","Gross MOIC"],["irrToDate","IRR to date"],["cnet","J-curve"]];
+  const opts=[["tvpi","TVPI"],["dpi","DPI"],["rvpi","RVPI"],["moic","Gross TVPI"],["irrToDate","IRR to date"],["cnet","J-curve"]];
   tabs("chartTabs",opts,chartKey,k=>{chartKey=k;renderChart(last)});
   const money=chartKey==="cnet", pctv=chartKey==="irrToDate";
   const yfmt=(v,full)=>money?(full?fmt.usdFull(v):fmt.usd(v)):pctv?(v*100).toFixed(1)+"%":v.toFixed(2)+"x";
   lineChart("chart",["T","K"].map(k=>({n:NAME[k],c:COL[k],v:r[k][chartKey]})),yfmt,money||pctv?0:1);
+  const notes={
+    irrToDate:"IRR to date is mathematically undefined in Year 1 (shown as –), before any capital has moved.",
+    tvpi:`Failed positions are held at cost here through Year ${S.failYear}, then written off from Year ${S.failYear+1} — real funds don't mark a company to zero the instant it's destined to fail. Only this chart is affected; DPI and IRR use realised cash only.`,
+    rvpi:`Failed positions are held at cost here through Year ${S.failYear}, then written off from Year ${S.failYear+1} — real funds don't mark a company to zero the instant it's destined to fail. Only this chart is affected; DPI and IRR use realised cash only.`,
+    moic:`Failed positions are held at cost here through Year ${S.failYear}, then written off from Year ${S.failYear+1} — real funds don't mark a company to zero the instant it's destined to fail. Only this chart is affected; DPI and IRR use realised cash only.`,
+  };
+  $("chartnote").textContent=notes[chartKey]||"";
 }
 function renderHist(mc){
   const W=760,H=256,m={l:48,r:14,t:10,b:46};
@@ -212,7 +224,7 @@ function renderHist(mc){
   $("mcstats").innerHTML=["T","K"].map(k=>{const s=mc[k];return `<div class="mc"><h3 class="${k.toLowerCase()}">${NAME[k]}</h3><dl>
     <dt>Chance LPs lose money</dt><dd>${(s.loss*100).toFixed(1)}%</dd><dt>Worst 10% of funds</dt><dd>${s.p10.toFixed(2)}x</dd>
     <dt>Median fund</dt><dd>${s.p50.toFixed(2)}x</dd><dt>Best 10% of funds</dt><dd>${s.p90.toFixed(2)}x</dd><dt>Average</dt><dd>${s.mean.toFixed(2)}x</dd>
-    <dt>Average net IRR</dt><dd>${isNaN(s.irrMean)?"n/a":(s.irrMean*100).toFixed(1)+"%"}</dd></dl></div>`}).join("");
+    <dt>Median net IRR</dt><dd>${isNaN(s.irrMedian)?"n/a":(s.irrMedian*100).toFixed(1)+"%"}</dd></dl></div>`}).join("");
 }
 function renderFounder(){
   const p=S, keepConv=1-p.redRate, dil=v=>p.roundVal?v/p.roundVal:0;
@@ -236,7 +248,7 @@ function renderFounder(){
 function cfRows(o){
   const rows=[];Object.entries(o.rows).forEach(([k,v])=>rows.push([k,v,"usd"]));
   rows.push(["Total paid-in",o.paid,"usd",1],["Gross distributions",o.dist,"usd",1],["Unrealised value (NAV)",o.nav,"usd"],["Distributions to LPs (after carry)",o.lpd,"usd"],
-    ["LP net cash flow",o.net,"usd",1],["Cumulative LP net cash flow",o.cnet,"usd"],["DPI",o.dpi,"x",1],["RVPI",o.rvpi,"x",1],["TVPI",o.tvpi,"x",1],["Gross MOIC",o.moic,"x"]);
+    ["LP net cash flow",o.net,"usd",1],["Cumulative LP net cash flow",o.cnet,"usd"],["DPI",o.dpi,"x",1],["RVPI",o.rvpi,"x",1],["TVPI",o.tvpi,"x",1],["Gross TVPI",o.moic,"x"]);
   return rows;
 }
 function renderCF(r){
@@ -277,14 +289,14 @@ function buildWorkbook(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(inputRows),"Inputs");
 
   const results=[["RESULTS","SAFE only","SAFE + Keel"],
-    ["Net TVPI",r.T.TVPI,r.K.TVPI],["Net IRR",r.T.irr,r.K.irr],["Gross MOIC",r.grossMultipleT,r.grossMultipleK],
+    ["Net TVPI",r.T.TVPI,r.K.TVPI],["Net IRR",r.T.irr,r.K.irr],["Gross TVPI",r.grossMultipleT,r.grossMultipleK],
     ["DPI at year 4",r.T.dpi[3],r.K.dpi[3]],["RVPI at year 4",r.T.rvpi[3],r.K.rvpi[3]],
     ["DPI at year 6",r.T.dpi[5],r.K.dpi[5]],["RVPI at year 6",r.T.rvpi[5],r.K.rvpi[5]],
     ["Capital lost in failures",r.writeOffT,r.writeOffK],["Seed positions backed",r.d.NT,r.d.NK],
     [],["KEEL DETAIL","",""],["Recovered from failures","",r.recoveredK],["Recycled into winners' next round","",r.recycledK],
     ["Distributed to LPs from redemptions","",r.distFromRedK],["Total Keel fees","",r.feesK],["Keel fees as % of fund","",r.feesPctK]];
   if(mc){ results.push([],[`SIMULATION (${mc.runs} funds, net TVPI)`,"SAFE only","SAFE + Keel"]);
-    [["Chance LPs lose money","loss"],["Worst 10%","p10"],["Median","p50"],["Best 10%","p90"],["Average","mean"],["Average net IRR","irrMean"]]
+    [["Chance LPs lose money","loss"],["Worst 10%","p10"],["Median","p50"],["Best 10%","p90"],["Average","mean"],["Median net IRR","irrMedian"]]
       .forEach(([l,k])=>results.push([l,mc.T[k],mc.K[k]])); }
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(results),"Results");
 

@@ -174,12 +174,12 @@ describe("Monte Carlo", () => {
     const a = monte(DEF, 500), b = monte(DEF, 500);
     expect(a.K.mean).toBe(b.K.mean);
   });
-  it("averages close to the deterministic result", () => {
+  it("averages/medians close to the deterministic result", () => {
     const mc = monte(DEF, 3000), r = run(DEF);
     expect(mc.T.mean).toBeCloseTo(r.T.TVPI, 1);
     expect(mc.K.mean).toBeCloseTo(r.K.TVPI, 1);
-    expect(mc.T.irrMean).toBeCloseTo(r.T.irr, 1);
-    expect(mc.K.irrMean).toBeCloseTo(r.K.irr, 1);
+    expect(mc.T.irrMedian).toBeCloseTo(r.T.irr, 1);
+    expect(mc.K.irrMedian).toBeCloseTo(r.K.irr, 1);
   });
   it("runs fast enough to stay interactive", () => {
     const t0 = Date.now();

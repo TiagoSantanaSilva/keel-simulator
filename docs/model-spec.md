@@ -130,7 +130,9 @@ purely from the cash-flow rows below, matching the workbook exactly.
 - **DPI** = cumulative LP distributions (after carry) / cumulative paid-in.
 - **RVPI** = (LP total value at cost − LP distributions) / paid-in, from the NAV convention above.
 - **TVPI** = DPI + RVPI, net of carry. Equals DPI once every position has exited.
-- **Gross multiple** = total proceeds (before fees and carry) / fund size.
+- **Gross TVPI** (labelled "Gross multiple" in older copy) = total proceeds (before fees and
+  carry) / fund size — a gross TVPI on *committed* capital, not a MOIC on capital actually
+  invested (those differ here since the reserve isn't called until `foYear`).
 - **Net IRR** on yearly LP cash flows (contributions negative, distributions positive); the
   solver returns the root closest to zero. **IRR to date** (`irrToDate[i]`) restricts the cash
   flows to years 0..i, but adds that year's unrealised LP NAV (`lptv[i] − lpc[i]`) as an extra
@@ -149,3 +151,9 @@ Redemption, fees and recycling are applied to the random failure count using the
 formulas as the deterministic model. Cash-flow timing is unchanged across runs (only the
 dollar amounts vary), so each run gets its own net IRR, not just a TVPI. Seeded RNG, so
 results are reproducible.
+
+The TVPI summary stat (`mean`) is a plain average — TVPI is a ratio of two dollar totals, so
+averaging it across runs is well-defined. IRR is not: it's a rate computed from each run's own
+cash-flow timing, and the mean of several runs' rates doesn't correspond to any actual
+portfolio's return. `irrMedian` reports the median run's IRR instead, which is well-defined
+regardless (it's just "the middle run," picked by sorting).

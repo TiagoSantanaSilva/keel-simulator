@@ -265,10 +265,15 @@ export function monte(p,runs){
     irrK.push(irr(netK));
   }
 
+  // The mean of a set of IRRs isn't a meaningful aggregate -- IRR is a rate over each run's
+  // own cash-flow timing, so averaging rates from differently-timed runs doesn't correspond
+  // to any single portfolio's actual return. The median is well-defined regardless (it's
+  // just "the middle run's IRR"), so we report that instead.
+  const median=a=>{const b=a.slice().sort((x,y)=>x-y);return b.length?b[Math.floor(b.length/2)]:NaN};
   const st=(a,ia)=>{const b=a.slice().sort((x,y)=>x-y),q=f=>b[Math.min(b.length-1,Math.floor(f*b.length))];
     const vi=ia.filter(v=>!isNaN(v));
     return {mean:a.reduce((x,y)=>x+y,0)/a.length,p10:q(.1),p50:q(.5),p90:q(.9),loss:a.filter(v=>v<1).length/a.length,arr:a,
-      irrMean:vi.length?vi.reduce((x,y)=>x+y,0)/vi.length:NaN};
+      irrMedian:median(vi)};
   };
   return {T:st(resT,irrT),K:st(resK,irrK),runs,NT,NK};
 }

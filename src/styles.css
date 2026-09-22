@@ -21,7 +21,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:"Schibsted Grote
 button,input,select{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .app{display:grid;grid-template-columns:340px minmax(0,1fr);min-height:100vh}
-@media (max-width:900px){.app{grid-template-columns:1fr}}
+/* On phones, show results before the (long) input rail, so the first thing a visitor
+   sees is a number, not a scroll of sliders. Visual order only -- DOM order (and so tab
+   order) is unchanged, since the inputs still make sense to reach first by keyboard. */
+@media (max-width:900px){.app{grid-template-columns:1fr}main{order:1}.rail{order:2}}
 
 /* control rail */
 .rail{background:var(--surface);border-right:1px solid var(--line);padding:22px 20px 40px;position:sticky;top:0;height:100vh;overflow-y:auto}
@@ -48,26 +51,27 @@ details.grp summary::-webkit-details-marker{display:none}
 details.grp summary::after{content:"+";color:var(--muted);font-weight:400;font-size:18px}
 details.grp[open] summary::after{content:"\2212"}
 .field{margin:12px 0 4px}
-.field label{display:flex;justify-content:space-between;gap:10px;font-size:13px}
-.field label span{color:var(--ink);font-weight:700}
-.field label output{color:var(--ink);font-weight:600;white-space:nowrap}
+.field label{display:flex;flex-wrap:nowrap;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px}
+.field label span{color:var(--ink);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.field label output{color:var(--ink);font-weight:600;white-space:nowrap;flex-shrink:0}
 .field input[type=range]{width:100%;accent-color:var(--keel);margin:6px 0 0}
 .field .hint{font-size:12px;color:var(--muted);margin-top:2px}
 .warn{font-size:12px;color:var(--neg);margin-top:6px;min-height:1em}
 
 /* outcomes table */
 .outwrap{overflow-x:auto}
-table.outtbl{border-collapse:collapse;width:100%;font-size:12.5px}
-table.outtbl th{text-align:left;color:var(--muted);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--line)}
+table.outtbl{border-collapse:collapse;width:max-content;min-width:100%;font-size:12.5px}
+table.outtbl th{text-align:left;color:var(--muted);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
 table.outtbl td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
 table.outtbl td.dim{color:var(--muted);text-align:center}
 table.outtbl .hint{font-weight:400;white-space:normal;max-width:20ch}
 table.outtbl input.cell{width:52px;font:inherit;border:1px solid var(--line);border-radius:5px;background:var(--sunk);color:var(--ink);padding:3px 4px}
-table.outtbl input.cell-label{width:100%;min-width:88px;font-weight:600;text-align:left}
+table.outtbl input.cell-label{width:100%;min-width:110px;font-weight:600;text-align:left}
+table.outtbl td:last-child{padding-left:2px;padding-right:2px}
 table.outtbl tfoot td{font-weight:700;padding-top:8px}
 table.outtbl tfoot #outtotal.ok{color:var(--pos)}
 table.outtbl tfoot #outtotal.bad{color:var(--neg)}
-.rowdel{border:1px solid var(--line);background:var(--sunk);color:var(--neg);border-radius:5px;width:22px;height:22px;line-height:1;cursor:pointer;font-size:14px}
+.rowdel{border:1px solid var(--line);background:var(--sunk);color:var(--neg);border-radius:5px;width:22px;height:22px;line-height:1;cursor:pointer;font-size:14px;flex-shrink:0}
 .outadd{margin-top:8px;padding:5px 12px;font-size:12.5px}
 
 /* main */
