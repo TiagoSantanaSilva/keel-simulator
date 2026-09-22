@@ -4,6 +4,10 @@ import { G, DEF, PRESETS } from "./config.js";
 import { fmt } from "./format.js";
 import { YR, run, monte, STRONG_MULTS, OUTLIER_MULTS, grid } from "./engine.js";
 
+// Bump whenever the input schema changes shape or meaning, so a stale save from an
+// older version of the model isn't silently merged onto new defaults.
+const SCHEMA_VERSION = 2;
+
 let S = Object.assign({}, DEF);
 let preset = "Your base case";
 
@@ -223,7 +227,15 @@ function update(){
   if(!warnings()) return;
   last=run(S); renderHull(last); renderStats(last); renderChart(last); renderCF(last); renderFounder();
   clearTimeout(mcTimer); mcTimer=setTimeout(()=>{lastMC=monte(S,2000);renderHist(lastMC);lastGrid=grid(S);renderHeat(lastGrid);
-    try{localStorage.setItem("keel-sim-inputs",JSON.stringify(S))}catch(e){}},180);
+    try{localStorage.setItem("keel-sim-inputs",JSON.stringify({v:SCHEMA_VERSION,s:S}))}catch(e){}},180);
 }
-try{const saved=JSON.parse(localStorage.getItem("keel-sim-inputs")||"null"); if(saved&&typeof saved==="object"){S=Object.assign({},DEF,saved);preset=null}}catch(e){}
+try{
+  const saved=JSON.parse(localStorage.getItem("keel-sim-inputs")||"null");
+  if(saved&&typeof saved==="object"&&saved.v===SCHEMA_VERSION&&saved.s&&typeof saved.s==="object"){
+    const clean={}; Object.keys(DEF).forEach(k=>{if(k in saved.s) clean[k]=saved.s[k]});
+    S=Object.assign({},DEF,clean); preset=null;
+  }else{
+    localStorage.removeItem("keel-sim-inputs");
+  }
+}catch(e){}
 buildPresets(); buildControls(); update();
