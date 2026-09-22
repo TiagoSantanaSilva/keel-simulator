@@ -40,9 +40,7 @@ export const G = [
  {id:"yld",section:"K",title:"Reserve yield",f:[
   ["yld","Reserve yield (annual)",0,.12,.005,"pct"]]},
  {id:"rec",section:"K",title:"Recycling",f:[
-  ["recShare","Share of recovered capital recycled into follow-ons",0,1,.05,"pct","Into winners' next round, uncapped. The rest is distributed to LPs."],
-  ["recMult","Multiple on recycled capital (gross)",1,6,.25,"x"],
-  ["recExit","Recycled capital exits (years after initial check)",1,11,1,"yr"]]},
+  ["recShare","Share of recovered capital recycled into follow-ons",0,1,.05,"pct","Into winners' next round, uncapped. The rest is distributed to LPs. Recycled capital shares the follow-on reserve's multiple and exit year."]]},
  {id:"pricing",section:"K",title:"Keel pricing",f:[
   ["keelFee","Reserve fee paid by the fund (annual)",0,.05,.0025,"pct2","Charged on the Keel reserve balance, while it's deployed."]]},
 ];
@@ -57,5 +55,5 @@ export const DEF = {F:50e6,MFY:10,MF:.02,carry:.2,
   ],
   redRate:.75,dConv:2,dRed:3,
   yld:.04,
-  recShare:.5,recMult:3,recExit:8,
+  recShare:.5,
   keelFee:.025};

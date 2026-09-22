@@ -249,7 +249,7 @@ function warnings(){
   const w=[]; const shareSum=S.sh0+S.outcomes.reduce((a,o)=>a+o.share,0);
   if(Math.abs(shareSum-1)>0.001) w.push(`Outcome shares sum to ${(shareSum*100).toFixed(0)}%, not 100%.`);
   if(S.foExit<=S.foYear) w.push("Follow-ons must exit after they're deployed.");
-  if(S.recExit<=S.dRed) w.push("Recycled capital must exit after the redemption year.");
+  if(S.foExit<=S.dRed) w.push("Follow-ons must exit after the redemption year (recycled capital shares this exit).");
   $("warn").textContent=w.join(" ");
   return w.length===0;
 }

@@ -31,11 +31,17 @@ resolution (every formula here is keyed off a single check date) — a possible 
 not attempted as a partial fix.
 
 **Follow-ons and recycled capital are lump sums, not attributed to individual companies.**
-Each outcome bucket carries its own exit year, but `foExit` and `recExit` are each a single
-year for the *entire* pool — matching the workbook's own "blended return on follow-on
-capital, same for both funds" framing. Modelling per-company follow-on timing would mean
-tracking which specific companies received follow-on and recycled capital and when each one
-individually exits, which this expected-value model doesn't do.
+Each outcome bucket carries its own exit year, but `foExit` is a single year for the *entire*
+pool — matching the workbook's own "blended return on follow-on capital, same for both funds"
+framing. Modelling per-company follow-on timing would mean tracking which specific companies
+received follow-on and recycled capital and when each one individually exits, which this
+expected-value model doesn't do.
+
+**Recycled capital shares the follow-on reserve's multiple and exit year** (`foMult`,
+`foExit`) rather than having its own. There used to be a separate `recMult`/`recExit`, but
+since recycled capital is deployed the same way as the primary follow-on reserve — into
+winners, at the next round — there was no basis for it to earn a different return on a
+different timeline, so the two were merged.
 
 - **Year 1:** initial checks. Management fees are charged for `MFY` years starting here.
 - **Years 2 to `dConv`+1:** Keel charges its annual fee on positions still protected and
@@ -48,9 +54,8 @@ individually exits, which this expected-value model doesn't do.
   most common source of "why did the SAFE-only number move?" confusion.
 - Each outcome bucket exits, at its own `exit`+1 year, paying out its multiple on the whole
   check.
-- **Year `foExit`+1:** the follow-on reserve exits at `foMult`.
-- **Year `recExit`+1:** capital recycled from redemptions into winners' next round exits at
-  `recMult`.
+- **Year `foExit`+1:** the follow-on reserve *and* any recycled capital exit together, both
+  at `foMult`.
 
 ## Derived values (`derive`)
 

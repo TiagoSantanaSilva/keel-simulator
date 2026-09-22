@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { DEF } from "../src/config.js";
 import { run, monte, irr, YR } from "../src/engine.js";
 
-// Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for two deliberate
+// Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for three deliberate
 // deviations from the workbook:
 // 1. Keel pricing is a single flat annual reserve fee (`keelFee`) instead of the workbook's
 //    tiered licence + banded annual fee, at the user's request for a simpler pricing control.
@@ -10,6 +10,11 @@ import { run, monte, irr, YR } from "../src/engine.js";
 // 2. Recycling has no cap (the workbook's `recCap` has been removed), at the user's request.
 //    The default recShare (50%) no longer gets capped at 15% of fund size, so recycled/
 //    distFromRedK are higher than an uncapped-vs-capped comparison would otherwise show.
+// 3. Recycled capital shares the follow-on reserve's multiple and exit year (`foMult`,
+//    `foExit`) instead of its own `recMult`/`recExit`, at the user's request -- there was no
+//    basis for recycled capital to earn a different return on a different timeline from the
+//    primary follow-on reserve, since both are deployed the same way. TVPI/DPI are unaffected
+//    (same defaults, 3x either way), but K.irr shifts since the exit moved from year 8 to 7.
 // If a change moves these numbers on purpose, update them here and say why in the commit.
 describe("deterministic engine, default inputs", () => {
   const r = run(DEF);
@@ -21,7 +26,7 @@ describe("deterministic engine, default inputs", () => {
 
   it("matches the expected net IRR", () => {
     expect(r.T.irr).toBeCloseTo(0.1036283447, 3);
-    expect(r.K.irr).toBeCloseTo(0.1486333681, 3);
+    expect(r.K.irr).toBeCloseTo(0.1530585828, 3);
   });
 
   it("matches the expected gross multiple", () => {

@@ -54,7 +54,7 @@ export function derive(p){
   d.recycled=d.recovered*p.recShare;
   d.distFromRed=d.recovered-d.recycled;
   d.successK=d.NK*d.checkK*successMix(p);
-  d.grossK=d.successK/(1+p.premium)+d.foReserveK*p.foMult+d.distFromRed+d.recycled*p.recMult;
+  d.grossK=d.successK/(1+p.premium)+d.foReserveK*p.foMult+d.distFromRed+d.recycled*p.foMult;
   d.writeOffK=d.failedK*p.safeK+(d.failedK-d.redeemedK)*p.optK+d.totalFees;
 
   return d;
@@ -128,17 +128,16 @@ export function run(p){
     e=0;
     p.outcomes.forEach(o=>{if(t===o.exit) e+=d.NK*d.checkK*o.share*o.mult/(1+p.premium)});
     if(t===p.dRed) e+=d.distFromRed;
-    if(t===p.foExit) e+=d.foReserveK*p.foMult;
-    if(t===p.recExit) e+=d.recycled*p.recMult;
+    if(t===p.foExit) e+=(d.foReserveK+d.recycled)*p.foMult;
     R(K,"Exits and redemptions",t,e);
-    R(K,"Recycled into winners' next round",t,t===p.recExit?d.recycled*p.recMult:0);
+    R(K,"Recycled into winners' next round",t,t===p.foExit?d.recycled*p.foMult:0);
     K.dist[t]=e;
 
     n=0;
     p.outcomes.forEach(o=>{if(t<o.exit) n+=d.NK*d.checkK*o.share});
     if(t<p.dRed) n+=d.redeemedK*p.optK;
     if(t>=p.foYear&&t<p.foExit) n+=d.foReserveK;
-    if(t>=p.dRed&&t<p.recExit) n+=d.recycled;
+    if(t>=p.dRed&&t<p.foExit) n+=d.recycled;
     K.nav[t]=n;
   }
 
@@ -205,8 +204,7 @@ export function monte(p,runs){
     }
     p.outcomes.forEach((o,i)=>{if(o.exit<N) distK[o.exit]+=cK[i+1]*d.checkK*o.mult/(1+p.premium)});
     if(p.dRed<N)distK[p.dRed]+=distFromRed;
-    if(p.foExit<N)distK[p.foExit]+=foReserveK*p.foMult;
-    if(p.recExit<N)distK[p.recExit]+=recycled*p.recMult;
+    if(p.foExit<N)distK[p.foExit]+=(foReserveK+recycled)*p.foMult;
     cgd=0;lpcPrev=0;const netK=new Array(N);
     for(let t=0;t<N;t++){cgd+=distK[t];const lpc=wf(cgd);netK[t]=(lpc-lpcPrev)-paidK[t];lpcPrev=lpc}
     resK.push(p.F?lpcPrev/p.F:0);
