@@ -2,7 +2,7 @@ import "./styles.css";
 import * as XLSX from "xlsx";
 import { G, DEF } from "./config.js";
 import { fmt } from "./format.js";
-import { YR, run, monte } from "./engine.js";
+import { YR, run, monte, outcomeMultiples, FAIL_RAMP_YEARS } from "./engine.js";
 
 // Bump whenever the input schema changes shape or meaning, so a stale save from an
 // older version of the model isn't silently merged onto new defaults.
@@ -310,15 +310,10 @@ function renderFounder(){
   const fmtVal=(v,f)=>f==="pct"?fmt.pct1(v):f==="n"?v.toFixed(1):fmt.usdFull(v);
   // Each row is [label, value, format?, hero?]. The hero row gets a large, coloured
   // headline treatment; everything else sits in a compact two-column grid below it.
-  // "Fund POV" cards are what the company receives from *this one fund's* check alone;
-  // "Company POV" cards are the same moment but totalled across every protected investor
-  // in the round -- two different zoom levels on the same event, not two different events.
   const cards=[
     ["Normal round","wide",["SAFE only",[["Cash at close",p.checkT],["Dilution at this round's valuation",dil(p.checkT),"pct"],["Total capital received",p.checkT,null,true]]]],
-    ["If the company succeeds","succeed",["Fund POV",[["Cash at close",p.safeK],["Converts after "+p.dConv+" years",p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution, "+p.dConv+"y",p.yld*p.optK*p.dConv],["Total capital received",p.safeK+p.optK+p.yld*p.optK*p.dConv,null,true]]]],
-    ["If the company succeeds","succeed",["Company POV",[["This fund's SAFE (unprotected, not multi-investor)",p.safeK],["Round valuation (post-money)",p.roundVal],["Dilution from this round, round-wide",dil(p.safeK+p.totalOpt),"pct"],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],["Yield earned round-wide, "+p.dConv+"y",p.yld*p.totalOpt*p.dConv],["Total received round-wide",p.safeK+p.totalOpt+p.yld*p.totalOpt*p.dConv,null,true]]]],
-    ["If the company fails","fail",["Fund POV",[["Cash at close",p.safeK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["Redeemed after "+p.dRed+" years (received by the fund)",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["This fund's yield contribution, "+p.dRed+"y",p.yld*p.optK*p.dRed],["Total capital received",p.safeK+p.optK*keepConv+p.yld*p.optK*p.dRed,null,true]]]],
-    ["If the company fails","fail",["Company POV",[["This fund's SAFE (unprotected, not multi-investor)",p.safeK],["Round valuation (post-money)",p.roundVal],["Dilution from this round, round-wide",dil(p.safeK+p.totalOpt),"pct"],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Redeemed round-wide (received by all investors)",p.totalOpt*p.redRate],["Yield earned round-wide, "+p.dRed+"y",p.yld*p.totalOpt*p.dRed],["Total kept by the company round-wide",p.safeK+p.totalOpt*keepConv+p.yld*p.totalOpt*p.dRed,null,true]]]]];
+    ["If the company succeeds","succeed",["SAFE + Keel",[["Cash at close",p.safeK],["Converts after "+p.dConv+" years",p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution, "+p.dConv+"y",p.yld*p.optK*p.dConv],["Total capital received",p.safeK+p.optK+p.yld*p.optK*p.dConv,null,true]]]],
+    ["If the company fails","fail",["SAFE + Keel",[["Cash at close",p.safeK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["Redeemed after "+p.dRed+" years (received by the fund)",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["This fund's yield contribution, "+p.dRed+"y",p.yld*p.optK*p.dRed],["Total capital received",p.safeK+p.optK*keepConv+p.yld*p.optK*p.dRed,null,true]]]]];
   $("founder").innerHTML=cards.map(([t,kind,[badge,rows]])=>{
     const hero=rows.find(r=>r[3]), rest=rows.filter(r=>!r[3]);
     return `<div class="founder founder-${kind}">
@@ -349,6 +344,159 @@ function warnings(){
   if(S.outcomes.length&&S.dRed>=minExit) w.push("Redemptions must happen before the earliest outcome's exit year, so recycled capital has time to be deployed.");
   $("warn").textContent=w.join(" ");
   return w.length===0;
+}
+
+/* ---------------- assumptions page ---------------- */
+function renderAssumptions(){
+  const p=S;
+  const I=p.F*(1-p.MF*p.MFY), checkPool=I*(1-p.reserve), foReserve=I*p.reserve;
+  const mults=outcomeMultiples(p);
+  const failEnd=p.failYearStart+FAIL_RAMP_YEARS;
+  const outcomeRows=p.outcomes.map((o,i)=>`<tr>
+      <td>${o.label}</td>
+      <td class="num">${(o.share*100).toFixed(0)}%</td>
+      <td class="num">${fmt.usd(o.exitVal)}</td>
+      <td class="num">${mults[i].toFixed(1)}x</td>
+      <td class="num">${(o.foPct*100).toFixed(0)}%</td>
+      <td class="num">${mults[i]>0?(1/o.foPct).toFixed(1)+"x":"–"}</td>
+      <td class="num">Year ${o.exit+1}</td>
+    </tr>`).join("");
+  $("assumptionsPage").innerHTML=`<div class="doc">
+    <h1 class="doctitle">Every assumption behind these numbers</h1>
+    <p class="lede">This page walks through exactly what the model on the Results tab assumes, in
+    plain language, using your current inputs — change anything in the sidebar and come back;
+    the figures below update with it.</p>
+    <p class="docupdated">Reflects the inputs currently set in the sidebar, not a fixed example.</p>
+
+    <div class="docsec">
+      <h3><span class="docnum">1</span>The fund and the round</h3>
+      <p>The fund is <strong>${fmt.usd(p.F)}</strong>. Management fees run
+      <strong>${fmt.pct1(p.MF)}</strong> a year for <strong>${p.MFY} years</strong>, and carried
+      interest is <strong>${fmt.pct1(p.carry)}</strong>, European-style with no hurdle — LPs get
+      every dollar of their commitments back before the fund keeps any share of the rest.
+      After fees, <strong>${fmt.usd(I)}</strong> is actually investable. Of that,
+      <strong>${fmt.pct1(p.reserve)}</strong> (${fmt.usd(foReserve)}) is set aside as a follow-on
+      reserve up front, and the rest — <strong>${fmt.usd(checkPool)}</strong> — funds the initial
+      checks.</p>
+      <p>Every company in the portfolio is assumed to raise its seed round at the same
+      <strong>${fmt.usd(p.roundVal)}</strong> post-money entry valuation. That single number is
+      the yardstick every outcome below is measured against.</p>
+    </div>
+
+    <div class="docsec">
+      <h3><span class="docnum">2</span>What happens to each company</h3>
+      <p>Every company lands in exactly one outcome bucket. <strong>${fmt.pct1(p.sh0)}</strong> of
+      them fail outright and return nothing. The rest exit at one of the values below — a
+      company's <em>multiple</em> isn't typed in directly, it's its exit value divided by the
+      ${fmt.usd(p.roundVal)} entry valuation above, so raising the entry price lowers every
+      multiple at once, and vice versa.</p>
+      <table class="doctbl"><thead><tr><th>Outcome</th><th>Share</th><th>Exit value</th>
+        <th>Multiple</th><th>Follow-on at</th><th>Follow-on return</th><th>Exit year</th></tr></thead>
+        <tbody>${outcomeRows}</tbody></table>
+      <p class="muted">"Follow-on at" is that company's follow-on round as a percentage of its
+      own eventual exit value — see section 4. "Follow-on return" is what a follow-on dollar in
+      that company is worth by exit: 1 ÷ that percentage, independent of the company's own
+      multiple.</p>
+    </div>
+
+    <div class="docsec">
+      <h3><span class="docnum">3</span>Two ways to write the check</h3>
+      <p><strong>SAFE only:</strong> every position is a single unprotected check of
+      <strong>${fmt.usd(p.checkT)}</strong>. Nothing comes back if the company fails.</p>
+      <p><strong>SAFE + Keel:</strong> every position instead splits into
+      <strong>${fmt.usd(p.safeK)}</strong> of ordinary, unprotected SAFE and
+      <strong>${fmt.usd(p.optK)}</strong> of Keel-protected convertible. Both strategies draw
+      from the <em>same</em> ${fmt.usd(checkPool)} check pool and the same
+      ${fmt.usd(foReserve)} follow-on reserve, funding the same companies at the same odds — the
+      only thing that differs is what happens to the protected slice on failure (see section 5).
+      On success, the whole check converts at a
+      <strong>${fmt.pct1(p.premium)}</strong> premium over the entry valuation, so Keel's
+      convertible buys in slightly more expensively than a plain SAFE would.</p>
+    </div>
+
+    <div class="docsec">
+      <h3><span class="docnum">4</span>The follow-on reserve</h3>
+      <p>The ${fmt.usd(foReserve)} reserve is deployed in year <strong>${p.foYear+1}</strong>,
+      split across whichever companies are still <em>eligible</em> at that point — not just the
+      ones that will definitely survive. A company that hasn't yet been recognised as a failure
+      (see section 7) can still receive follow-on money and go on to fail anyway; that slice is
+      simply lost, the same way it would be for a real fund that can't tell winners from losers
+      in advance.</p>
+      <p>How that reserve is split across companies is controlled by
+      <strong>follow-on allocation skill (${fmt.pct1(p.foSkill)})</strong>: at 0% it's spread
+      evenly per eligible company; at 100% it's weighted toward the companies that turn out to be
+      the biggest winners, as if the fund already knew. ${fmt.pct1(p.foSkill)} blends the two.</p>
+      <div class="callout"><b>There's no interior optimum on the reserve size.</b> Because this
+      is an expected-value model, moving the <em>reserve</em> slider just shifts capital between
+      two pools with fixed blended returns — whichever pool is more efficient wins at every level
+      of the slider, so returns move in one direction the whole way, never peaking in the middle.
+      What the reserve size actually trades off — fewer initial checks, more variance — only
+      shows up in the Monte Carlo section (see section 9), not in the headline TVPI/IRR.</div>
+    </div>
+
+    <div class="docsec">
+      <h3><span class="docnum">5</span>Keel's protection decisions</h3>
+      <p>When a protected company fails, Keel redeems <strong>${fmt.pct1(p.redRate)}</strong> of
+      the protected balance after <strong>${p.dRed} years</strong>; the rest is lost along with
+      the unprotected portion of the check. While a position is still protected and awaiting its
+      conversion or redemption decision, Keel charges an annual fee of
+      <strong>${fmt.pct2(p.keelFee)}</strong> on the protected balance — for
+      <strong>${p.dConv} years</strong> on positions headed for conversion,
+      <strong>${p.dRed} years</strong> on positions headed for redemption.</p>
+      <p class="muted">If that fee would ever add up to more than the follow-on reserve can
+      absorb, the model shrinks the number of companies backed rather than calling extra capital
+      beyond the fund's own size — fees are a real cost, never a source of free capital.</p>
+    </div>
+
+    <div class="docsec">
+      <h3><span class="docnum">6</span>Recycling redeemed capital</h3>
+      <p>Of the capital Keel recovers from redemptions,
+      <strong>${fmt.pct1(p.recShare)}</strong> is recycled into winners' next round (uncapped),
+      earning that winner's own follow-on return just like the primary reserve. The rest is
+      distributed straight to LPs. If there's nothing left to recycle into — no survivors at
+      all — the recycled share is paid out to LPs directly instead of disappearing.</p>
+    </div>
+
+    <div class="docsec">
+      <h3><span class="docnum">7</span>How unrealised value is marked</h3>
+      <p>The RVPI/TVPI-over-time chart needs some convention for what an unrealised position is
+      "worth" before it exits — this never touches DPI or IRR, which only look at cash actually
+      paid or received. A company destined to succeed is held at cost until the follow-on round
+      in year ${p.foYear+1}, then marked up to reflect that round's pricing, until it finally
+      exits at its full multiple. A company destined to fail is held at cost through year
+      ${p.failYearStart}, then written down gradually — not all at once — until it reaches zero
+      in year ${failEnd}, since real portfolios take time to recognise a loss rather than marking
+      it to zero the instant the outcome is known.</p>
+    </div>
+
+    <div class="docsec">
+      <h3><span class="docnum">8</span>The waterfall</h3>
+      <p>European, no hurdle: LPs receive every dollar of their ${fmt.usd(p.F)} in commitments
+      back first, and only after that does the fund keep
+      <strong>${fmt.pct1(p.carry)}</strong> of anything further. Net IRR is solved from the
+      resulting yearly LP cash flows; "IRR to date" does the same thing year by year, treating
+      that year's unrealised value as if it were cashed out then, so it stops reading as
+      meaningless (or undefined) before any real money has moved.</p>
+    </div>
+
+    <div class="docsec">
+      <h3><span class="docnum">9</span>The Monte Carlo simulation</h3>
+      <p>The charts above are an <em>expected value</em> — a blend across every possible outcome,
+      weighted by its odds, as if you could run the fund many times and average the results.
+      "Across 2,000 simulated funds" instead draws 2,000 individual, whole-number portfolios from
+      those same odds, the way one actual fund's actual portfolio would turn out.</p>
+      <div class="callout"><b>The average and the median can differ a lot when a fund makes few
+      bets.</b> With a skewed, power-law-ish outcome mix like this one, most of a fund's expected
+      value comes from rare, huge winners. A fund with only a handful of positions is quite
+      likely to land zero of them — so its <em>median</em> simulated outcome can sit well below
+      the <em>average</em>, which is inflated by the rare runs that do hit the outlier. The fewer
+      companies a strategy backs, the more this gap matters — check the median fund, worst-decile
+      and best-decile figures in that section, not just the average, especially at smaller check
+      sizes.</div>
+      <p class="muted">The simulation is seeded, so re-running it with the same inputs always
+      reproduces the same 2,000 funds.</p>
+    </div>
+  </div>`;
 }
 
 /* ---------------- XLSX export ---------------- */
@@ -414,12 +562,25 @@ $("dl").onclick=async()=>{
   }catch(e){const c=e&&e.code; st.textContent=c==="declined"?"Download cancelled.":c==="rate_limited"?"A download prompt is already open. Try again in a moment.":"Downloads aren't available here."; if(c&&c!=="declined"&&c!=="rate_limited"){$("dl").hidden=true}}
 };
 
+/* ---------------- pages (Results / Assumptions) ---------------- */
+let pageKey="results";
+function renderPageTabs(){
+  tabs("pageTabs",[["results","Results"],["assumptions","Assumptions"]],pageKey,k=>{pageKey=k; applyPage()});
+}
+function applyPage(){
+  renderPageTabs();
+  $("resultsPage").hidden=pageKey!=="results";
+  $("assumptionsPage").hidden=pageKey!=="assumptions";
+  if(pageKey==="assumptions") renderAssumptions();
+}
+
 /* ---------------- loop ---------------- */
 let timer=null, mcTimer=null;
 function schedule(now){clearTimeout(timer);timer=setTimeout(update,now?0:60)}
 function update(){
   if(!warnings()) return;
   last=run(S); renderHull(last); renderStats(last); renderChart(last); renderCF(last); renderFounder();
+  if(pageKey==="assumptions") renderAssumptions();
   clearTimeout(mcTimer); mcTimer=setTimeout(()=>{lastMC=monte(S,2000);renderHist(lastMC);
     try{localStorage.setItem("keel-sim-inputs",JSON.stringify({v:SCHEMA_VERSION,s:S}))}catch(e){}},180);
 }
@@ -433,4 +594,4 @@ try{
     localStorage.removeItem("keel-sim-inputs");
   }
 }catch(e){}
-buildControls(); update();
+buildControls(); renderPageTabs(); update();

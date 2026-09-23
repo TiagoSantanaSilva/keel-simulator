@@ -21,6 +21,9 @@
 <div class="railResize" id="railResize" role="separator" aria-orientation="vertical" aria-label="Resize the assumptions sidebar" tabindex="0"></div>
 
 <main>
+  <div class="pagetabs" role="tablist" id="pageTabs"></div>
+
+  <div id="resultsPage">
   <h1 id="headline">What a $50M seed fund returns to its LPs</h1>
   <p class="lede">The same fund, the same companies, two ways to invest: write the full check as a SAFE, or split it into a SAFE plus a Keel convertible.</p>
 
@@ -68,6 +71,9 @@
     <div class="status" id="dlstatus" role="status"></div>
     <p class="note" style="margin-top:22px">Expected-value model with illustrative assumptions, not a forecast or investment advice. Keel's protection covers company failure only; vault, venue and stablecoin risk on the reserve is not modelled.</p>
   </section>
+  </div>
+
+  <div id="assumptionsPage" hidden></div>
 </main>
 </div>
 <script type="module" src="/src/main.js"></script>

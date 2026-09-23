@@ -105,6 +105,36 @@ h2{font-size:20px;letter-spacing:-.01em;margin:0 0 4px}
 .sub{color:var(--muted);font-size:14px;margin:0 0 16px;max-width:72ch}
 section{margin-top:44px}
 
+/* page-level tabs (Results / Assumptions) */
+.pagetabs{display:flex;gap:8px;margin-bottom:32px}
+.pagetabs button{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:8px 18px;font-size:14px;font-weight:700;cursor:pointer}
+.pagetabs button:hover{color:var(--ink)}
+.pagetabs button[aria-selected="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+
+/* assumptions document */
+.doc{max-width:76ch}
+.doc .doctitle{font-size:clamp(26px,3vw,34px)}
+.doc .lede{margin-bottom:8px}
+.doc .docupdated{color:var(--muted);font-size:12.5px;margin:0 0 36px}
+.doc .docsec{margin:0 0 38px;padding-bottom:34px;border-bottom:1px solid var(--line)}
+.doc .docsec:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
+.doc h3{font-size:17px;margin:0 0 14px;letter-spacing:-.01em;display:flex;align-items:center;gap:10px;color:var(--ink)}
+.doc h3 .docnum{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--keel);color:#fff;font-size:12px;font-weight:800}
+.doc p{color:var(--ink);line-height:1.75;margin:0 0 14px;max-width:68ch}
+.doc p:last-child{margin-bottom:0}
+.doc p.muted{color:var(--muted);font-size:13.5px}
+.doc strong{font-weight:700}
+.doc .callout{background:var(--sunk);border-left:3px solid var(--keel);border-radius:8px;padding:13px 16px;margin:16px 0;font-size:13.5px;line-height:1.65;color:var(--muted)}
+.doc .callout b{color:var(--ink);font-weight:700}
+.doc .callout:last-child{margin-bottom:0}
+.doc ul{margin:0 0 14px;padding-left:20px;color:var(--ink);line-height:1.75}
+.doc li{margin-bottom:6px}
+table.doctbl{border-collapse:collapse;width:100%;margin:14px 0 18px;font-size:13.5px}
+table.doctbl th{text-align:left;color:var(--muted);font-weight:600;padding:6px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.doctbl td{padding:6px 12px;border-bottom:1px solid var(--line)}
+table.doctbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+@media (max-width:640px){table.doctbl{font-size:12.5px}table.doctbl th,table.doctbl td{padding:5px 8px}}
+
 /* waterline hero */
 .hull{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 22px 18px;position:relative}
 .hull .row{display:grid;grid-template-columns:120px minmax(0,1fr) 92px;align-items:center;gap:14px;margin:12px 0}
