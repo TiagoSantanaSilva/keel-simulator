@@ -321,7 +321,14 @@ function renderWinMap(){
   // redRate/recShare rarely land exactly on a grid line, so snapping to the closest cell
   // could report a visibly different delta than what the rest of the page is showing.
   const curDelta=last?delta({tvpiT:last.T.TVPI,tvpiK:last.K.TVPI,irrT:last.T.irr,irrK:last.K.irr}):0;
-  const maxAbs=Math.max(1e-6,...grid.flat().map(c=>Math.abs(delta(c))));
+  // IRR is genuinely undefined (NaN) for some cash-flow shapes -- e.g. a near-total-loss
+  // fund still paying management fees for years after its one investment failed has no real
+  // discount rate that zeroes its NPV. Math.max/comparisons propagate that NaN silently
+  // (Math.max(..., NaN) is NaN; NaN>=0 is false), which used to paint the whole grid red
+  // instead of leaving those cells honestly blank -- so both need filtering out explicitly.
+  const finite=grid.flat().map(c=>delta(c)).filter(v=>!Number.isNaN(v));
+  const maxAbs=Math.max(1e-6,...finite.map(Math.abs));
+  const anyUndefined=finite.length<grid.length*grid[0].length;
   const magFmt=v=>winMapKey==="tvpi"?v.toFixed(2)+"x":(v*100).toFixed(1)+" points";
 
   const fs=small?24:11;
@@ -332,8 +339,10 @@ function renderWinMap(){
 
   let g="";
   grid.forEach((row,j)=>row.forEach((cell,i)=>{
-    const d=delta(cell), t=Math.min(1,Math.abs(d)/maxAbs), col=d>=0?"var(--pos)":"var(--neg)";
-    g+=`<rect x="${cx(i).toFixed(1)}" y="${cy(j).toFixed(1)}" width="${(cellW+0.6).toFixed(1)}" height="${(cellH+0.6).toFixed(1)}" fill="${col}" fill-opacity="${(0.1+0.8*t).toFixed(2)}"/>`;
+    const d=delta(cell), rectAttrs=`x="${cx(i).toFixed(1)}" y="${cy(j).toFixed(1)}" width="${(cellW+0.6).toFixed(1)}" height="${(cellH+0.6).toFixed(1)}"`;
+    if(Number.isNaN(d)){ g+=`<rect ${rectAttrs} fill="var(--muted)" fill-opacity=".3"/>`; return; }
+    const t=Math.min(1,Math.abs(d)/maxAbs), col=d>=0?"var(--pos)":"var(--neg)";
+    g+=`<rect ${rectAttrs} fill="${col}" fill-opacity="${(0.1+0.8*t).toFixed(2)}"/>`;
   }));
   [0,.25,.5,.75,1].forEach(v=>{
     const px=m.l+v*plotW, py=m.t+(1-v)*plotH;
@@ -348,10 +357,18 @@ function renderWinMap(){
   g+=`<circle cx="${mx}" cy="${my}" r="${small?3:2.5}" fill="var(--ink)"/>`;
 
   $("winmap").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Whether SAFE + Keel or SAFE only wins, by redemption rate and recycled share">${g}</svg>`;
-  $("winmapnote").innerHTML=`At your current settings (<b>${fmt.pct1(p.redRate)}</b> redemption rate,
-    <b>${fmt.pct1(p.recShare)}</b> recycled) <b style="color:${curDelta>=0?"var(--pos)":"var(--neg)"}">
-    SAFE + Keel ${curDelta>=0?"beats":"trails"} SAFE by ${magFmt(Math.abs(curDelta))}
-    ${winMapKey==="tvpi"?"net TVPI":"net IRR"}</b>.`;
+  $("winmaplegend").innerHTML=`<span><span class="dot" style="background:var(--pos)"></span>SAFE + Keel wins</span><span><span class="dot" style="background:var(--neg)"></span>SAFE only wins</span>`
+    +(anyUndefined?`<span><span class="dot" style="background:var(--muted)"></span>IRR undefined</span>`:"");
+  $("winmapnote").innerHTML=Number.isNaN(curDelta)
+    ? `At your current settings (<b>${fmt.pct1(p.redRate)}</b> redemption rate,
+      <b>${fmt.pct1(p.recShare)}</b> recycled) net IRR isn't a meaningful number for at least one
+      strategy here — usually a near-total-loss fund still paying management fees for years
+      after its one investment already failed, so no discount rate zeroes its cash flows. Grey
+      cells on the map are the same case; try Net TVPI instead.`
+    : `At your current settings (<b>${fmt.pct1(p.redRate)}</b> redemption rate,
+      <b>${fmt.pct1(p.recShare)}</b> recycled) <b style="color:${curDelta>=0?"var(--pos)":"var(--neg)"}">
+      SAFE + Keel ${curDelta>=0?"beats":"trails"} SAFE by ${magFmt(Math.abs(curDelta))}
+      ${winMapKey==="tvpi"?"net TVPI":"net IRR"}</b>${anyUndefined?" (grey cells: IRR undefined there)":""}.`;
 }
 function renderFounder(){
   const p=S, keepConv=1-p.redRate, dil=v=>p.roundVal?v/p.roundVal:0;
