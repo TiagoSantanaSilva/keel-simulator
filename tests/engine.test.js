@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEF } from "../src/config.js";
-import { run, monte, irr, YR, FAIL_RAMP_YEARS } from "../src/engine.js";
+import { run, monte, irr, YR, FAIL_RAMP_YEARS, outcomeMultiples } from "../src/engine.js";
 
 // Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for four deliberate
 // deviations from the workbook:
@@ -42,23 +42,45 @@ import { run, monte, irr, YR, FAIL_RAMP_YEARS } from "../src/engine.js";
 //    to zero over a fixed `FAIL_RAMP_YEARS`-year window starting at `failYearStart` (default
 //    2), instead of cliff-dropping to zero in one year, since real portfolios bleed out
 //    losses over time rather than recognising them all at once.
+// 7. Outcome buckets store `exitVal` (absolute company value at exit) instead of a raw
+//    `mult`; the multiple used everywhere is now *derived* as exitVal/roundVal
+//    (`outcomeMultiples`/`withMult`), with roundVal acting as each bucket's entry
+//    valuation. DEF's defaults were migrated so the derived multiples match the old raw
+//    ones exactly (3x/10x/50x), so this alone doesn't move any number here. Likewise
+//    `foStepUp` is now derived from `foVal` (a follow-on valuation) ÷ roundVal; DEF.foVal
+//    (30e6) reproduces the old default foStepUp (3) exactly.
+// 8. Keel's fees can no longer push total paid-in above the fund size: fees beyond the
+//    reserve used to just get called as extra capital with no floor. They now shrink the
+//    check pool instead (`d.checkPoolK`, a closed-form fixed point since fees scale
+//    linearly with position count) -- fewer companies backed, not conjured capital. Doesn't
+//    move the default-input numbers below (fees fit inside the reserve at these inputs).
+// 9. The follow-on reserve is no longer allocated purely to known survivors -- it's spread
+//    across every position still "alive" (not yet recognised as a failure -- see item 6's
+//    ramp) at foYear, `d.eligibleAtFoYear`, which can be larger than the survivor share
+//    when foYear falls before/at failYearStart (true at DEF's defaults: both are year 2).
+//    Whatever lands on a company that goes on to fail is lost, same as the follow-on
+//    reserve would be in reality. This is what actually moves TVPI/IRR below -- previously
+//    the reserve was allocated only to the 30% who survive, so more reserve was always a
+//    free lunch; now the other 70% can eat some of it too, so TVPI/IRR both drop from
+//    item 6's levels and (crucially) `reserve` no longer makes returns monotonically better
+//    the higher it goes -- see "model invariants" for a test on exactly that.
 // If a change moves these numbers on purpose, update them here and say why in the commit.
 describe("deterministic engine, default inputs", () => {
   const r = run(DEF);
 
   it("matches the expected net TVPI", () => {
-    expect(r.T.TVPI).toBeCloseTo(1.7701333333, 3);
-    expect(r.K.TVPI).toBeCloseTo(2.1767466667, 3);
+    expect(r.T.TVPI).toBeCloseTo(1.5312, 3);
+    expect(r.K.TVPI).toBeCloseTo(1.998144, 3);
   });
 
   it("matches the expected net IRR", () => {
-    expect(r.T.irr).toBeCloseTo(0.0991367629, 3);
-    expect(r.K.irr).toBeCloseTo(0.1450852971, 3);
+    expect(r.T.irr).toBeCloseTo(0.0735052041, 3);
+    expect(r.K.irr).toBeCloseTo(0.1291534657, 3);
   });
 
   it("matches the expected gross multiple", () => {
-    expect(r.grossMultipleT).toBeCloseTo(1.9627, 2);
-    expect(r.grossMultipleK).toBeCloseTo(2.4709, 2);
+    expect(r.grossMultipleT).toBeCloseTo(1.664, 2);
+    expect(r.grossMultipleK).toBeCloseTo(2.2477, 2);
   });
 
   it("matches the expected DPI at year 4 and year 6", () => {
@@ -115,9 +137,12 @@ describe("deterministic engine, default inputs", () => {
 });
 
 describe("informational-only inputs", () => {
-  it("round valuation and total convertible amount don't affect returns", () => {
+  it("total convertible amount doesn't affect returns", () => {
+    // roundVal is *not* informational any more -- it's every outcome's entry valuation, so
+    // changing it moves returns on purpose (see "doubling the entry valuation..." above).
+    // totalOpt is still founder-view-only.
     const base = run(DEF);
-    const r = run({ ...DEF, roundVal: 25e6, totalOpt: 5e6 });
+    const r = run({ ...DEF, totalOpt: 5e6 });
     expect(r.T.TVPI).toBeCloseTo(base.T.TVPI, 9);
     expect(r.K.TVPI).toBeCloseTo(base.K.TVPI, 9);
   });
@@ -152,8 +177,10 @@ describe("model invariants", () => {
     // Isolate a single outcome bucket (no failures, no other buckets) so both the initial
     // check and the follow-on tranche are riding the exact same company's exit -- the only
     // difference is the entry price. Per dollar deployed, the seed check earns the bucket's
-    // raw multiple; the follow-on tranche earns multiple/foStepUp.
-    const p = { ...DEF, sh0: 0, outcomes: [{ label: "Only", share: 1, mult: 5, exit: 6 }], foStepUp: 3 };
+    // raw multiple; the follow-on tranche earns multiple/foStepUp. sh0:0 means there's no
+    // failure bucket to dilute the reserve with (item 9), so eligibleAtFoYear==survivorShare
+    // here regardless of foYear -- this test is purely about the step-up discount.
+    const p = { ...DEF, sh0: 0, outcomes: [{ label: "Only", share: 1, exitVal: 5 * DEF.roundVal, exit: 6 }], foVal: 3 * DEF.roundVal };
     const r = run(p);
     const seedReturnPerDollar = r.d.successT / (r.d.NT * p.checkT);
     const followOnReturnPerDollar = r.d.followOnValueT / r.d.foReserve;
@@ -161,16 +188,55 @@ describe("model invariants", () => {
   });
 
   it("net TVPI falls as the follow-on step-up rises", () => {
-    const low = run({ ...DEF, foStepUp: 1.5 });
-    const high = run({ ...DEF, foStepUp: 6 });
+    const low = run({ ...DEF, foVal: 1.5 * DEF.roundVal });
+    const high = run({ ...DEF, foVal: 6 * DEF.roundVal });
     expect(high.T.TVPI).toBeLessThan(low.T.TVPI);
     expect(high.K.TVPI).toBeLessThan(low.K.TVPI);
+  });
+
+  it("doubling the entry valuation halves every derived multiple", () => {
+    const m1 = outcomeMultiples(DEF);
+    const m2 = outcomeMultiples({ ...DEF, roundVal: DEF.roundVal * 2 });
+    m1.forEach((v, i) => expect(m2[i]).toBeCloseTo(v / 2, 6));
+  });
+
+  it("SAFE only and SAFE + Keel match when the convertible is zero", () => {
+    const p = { ...DEF, safeK: DEF.checkT, optK: 0 };
+    const r = run(p);
+    expect(r.K.TVPI).toBeCloseTo(r.T.TVPI, 6);
+  });
+
+  it("nothing to recycle into: recovered capital is paid out directly instead of vanishing", () => {
+    // 100% failure -- there are no survivors, so the reserve() blend can't place any of the
+    // recycled pool into a bucket. It must all show up as a direct LP distribution instead.
+    const p = { ...DEF, sh0: 1, outcomes: DEF.outcomes.map(o => ({ ...o, share: 0 })) };
+    const r = run(p);
+    expect(r.recycledK).toBeCloseTo(0, 0);
+    expect(r.distFromRedK).toBeCloseTo(r.recoveredK, 0);
+    expect(r.recoveredK).toBeGreaterThan(0);
+  });
+
+  it("Keel's total paid-in never exceeds the fund size, even when fees would otherwise blow through the reserve", () => {
+    // A high fee rate and a tiny reserve reproduce the reported bug exactly: fees this big
+    // used to get called on top of the fund size instead of shrinking anything.
+    const r = run({ ...DEF, keelFee: 0.05, reserve: 0.01 });
+    expect(r.K.cpaid.at(-1)).toBeLessThanOrEqual(DEF.F + 1);
+  });
+
+  it("more follow-on reserve doesn't always raise TVPI -- some of it is lost to companies that later fail", () => {
+    // At DEF's defaults, foYear coincides with failYearStart, so *every* position (not just
+    // survivors) is still "alive" when the reserve is allocated -- pushing reserve higher
+    // just means more of it lands on companies that go on to fail. This is the fix for the
+    // "reserve is a free lunch" bug: TVPI should now fall, not rise, as reserve grows.
+    const low = run({ ...DEF, reserve: 0.1 });
+    const high = run({ ...DEF, reserve: 0.4 });
+    expect(high.T.TVPI).toBeLessThan(low.T.TVPI);
   });
 });
 
 describe("NAV marks", () => {
   it("marks a surviving position up to the follow-on step-up from foYear, instead of holding flat at cost", () => {
-    const p = { ...DEF, sh0: 0, reserve: 0, outcomes: [{ label: "Only", share: 1, mult: 5, exit: 6 }], foYear: 2, foStepUp: 3 };
+    const p = { ...DEF, sh0: 0, reserve: 0, outcomes: [{ label: "Only", share: 1, exitVal: 5 * DEF.roundVal, exit: 6 }], foYear: 2, foVal: 3 * DEF.roundVal };
     const r = run(p);
     const cost = r.d.NT * p.checkT;
     expect(r.T.nav[1]).toBeCloseTo(cost, 0); // year 2 (t=1), still before foYear: at cost
@@ -190,11 +256,14 @@ describe("NAV marks", () => {
     expect(r.T.nav[end]).toBeCloseTo(0, 0); // fully written off from failYearStart + FAIL_RAMP_YEARS on
   });
 
-  it("the write-off ramp's timing never changes realised cash flows: DPI and net IRR are identical regardless of failYearStart", () => {
-    // failYearStart only appears in the NAV lines (failFrac); paid[]/dist[] -- and so
-    // DPI/IRR -- must be bit-for-bit independent of it.
-    const a = run({ ...DEF, failYearStart: 2 });
-    const b = run({ ...DEF, failYearStart: 0 });
+  it("the write-off ramp's timing doesn't change realised cash flows, as long as it stays after foYear", () => {
+    // failYearStart now has a genuine cash effect *when it's at or before foYear* (item 9:
+    // it controls how much of the reserve is still earmarked for not-yet-failed companies).
+    // But once it's safely after foYear, every position is already fully "alive" at
+    // deployment time regardless of the exact value, so paid[]/dist[] -- and so DPI/IRR --
+    // stay bit-for-bit independent of it in that range.
+    const a = run({ ...DEF, failYearStart: DEF.foYear + 1 });
+    const b = run({ ...DEF, failYearStart: DEF.foYear + 4 });
     expect(a.T.dpi).toEqual(b.T.dpi);
     expect(a.T.irr).toBeCloseTo(b.T.irr, 9);
     expect(a.K.dpi).toEqual(b.K.dpi);
@@ -232,13 +301,13 @@ describe("Monte Carlo", () => {
 
 
 describe("outcome buckets", () => {
-  it("is a plain array of {label, share, mult, exit}, and the shares (plus failure) sum to 100%", () => {
+  it("is a plain array of {label, share, exitVal, exit}, and the shares (plus failure) sum to 100%", () => {
     expect(Array.isArray(DEF.outcomes)).toBe(true);
     expect(DEF.outcomes.length).toBeGreaterThan(0);
     DEF.outcomes.forEach(o => {
       expect(typeof o.label).toBe("string");
       expect(typeof o.share).toBe("number");
-      expect(typeof o.mult).toBe("number");
+      expect(typeof o.exitVal).toBe("number");
       expect(typeof o.exit).toBe("number");
     });
     const sum = DEF.sh0 + DEF.outcomes.reduce((a, o) => a + o.share, 0);
@@ -246,7 +315,7 @@ describe("outcome buckets", () => {
   });
 
   it("supports adding and removing rows freely", () => {
-    const extra = { ...DEF, outcomes: [...DEF.outcomes, { label: "Mega outlier", share: 0, mult: 500, exit: 9 }] };
+    const extra = { ...DEF, outcomes: [...DEF.outcomes, { label: "Mega outlier", share: 0, exitVal: 500 * DEF.roundVal, exit: 9 }] };
     expect(() => run(extra)).not.toThrow();
     const fewer = { ...DEF, sh0: DEF.sh0 + DEF.outcomes[DEF.outcomes.length - 1].share, outcomes: DEF.outcomes.slice(0, -1) };
     expect(() => run(fewer)).not.toThrow();

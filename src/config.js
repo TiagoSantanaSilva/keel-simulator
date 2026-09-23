@@ -6,10 +6,12 @@
 // colour-coded header whenever the section changes.
 //
 // The "out" (Outcomes) group is rendered as an editable table (see main.js) instead of
-// sliders: one fixed Failure row (DEF.failLabel/sh0 -- no multiple or exit, since it never
-// returns anything) plus a user-editable, freely add/removable list of outcome buckets in
-// DEF.outcomes ({label, share, mult, exit}). There's no fixed set of fields for the success
-// buckets -- the array can be any length, which is what lets the table grow or shrink.
+// sliders: one fixed Failure row (DEF.failLabel/sh0 -- no exit value or exit year, since it
+// never returns anything) plus a user-editable, freely add/removable list of outcome
+// buckets in DEF.outcomes ({label, share, exitVal, exit}). There's no fixed set of fields
+// for the success buckets -- the array can be any length, which is what lets the table grow
+// or shrink. Each bucket's multiple isn't stored -- it's derived in engine.js as
+// exitVal / roundVal (see outcomeMultiples/withMult) and shown read-only in the table.
 
 export const G = [
  {id:"fund",section:"shared",title:"Fund",open:true,f:[
@@ -17,11 +19,12 @@ export const G = [
   ["MFY","Management fee period (years)",5,12,1,"n"],
   ["MF","Management fee (annual)",0,.05,.0025,"pct"],
   ["carry","Carried interest",0,.3,.05,"pct"]]},
- {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[]},
+ {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[
+  ["roundVal","Entry valuation (post-money, at the initial check)",1e6,100e6,500e3,"usd","Each outcome's multiple below is its exit value ÷ this. Keel's convertible enters at the premium above it (see Keel pricing)."]]},
  {id:"fo",section:"shared",title:"Follow-on reserve (same for both strategies)",f:[
   ["reserve","Follow-on reserve (% of investable capital)",0,.5,.01,"pct","More reserve means fewer initial checks. Raises variance either way — see Monte Carlo below."],
   ["foYear","Follow-ons deployed (years after initial check)",0,6,1,"yr","When follow-on money goes into surviving companies."],
-  ["foStepUp","Follow-on step-up (valuation multiple over the initial check)",1,10,.5,"x","Follow-on money buys in pricier, so it earns a smaller multiple than the initial check."],
+  ["foVal","Follow-on valuation (post-money)",1e6,1e9,1e6,"usd","Follow-on money buys in pricier than the initial check, so it earns a smaller multiple: this ÷ the entry valuation above."],
   ["foSkill","Follow-on allocation skill",0,1,.05,"pct","0% spreads it evenly. 100% concentrates it in the eventual winners."]]},
 
  {id:"checkT",section:"T",title:"Check size",open:true,f:[
@@ -31,7 +34,6 @@ export const G = [
   ["safeK","SAFE amount",0,3e6,25e3,"usd"],
   ["optK","Convertible amount",0,3e6,25e3,"usd","The protected part. Redeemable if the company fails, converts if it succeeds."],
   ["premium","Valuation premium on convertible rounds",0,.4,.01,"pct","0% = same price as a normal round."],
-  ["roundVal","Round valuation (post-money)",1e6,100e6,500e3,"usd"],
   ["totalOpt","Total convertible amount in the round",0,10e6,50e3,"usd","Across every protected investor, not just this fund. For the founder view."]]},
  {id:"dec",section:"K",title:"Keel decisions",open:true,f:[
   ["redRate","Redemption rate (failures redeemed before converting)",0,1,.05,"pct"],
@@ -46,12 +48,14 @@ export const G = [
 ];
 export const DEF = {F:50e6,MFY:10,MF:.02,carry:.2,
   checkT:500e3,safeK:0,optK:500e3,premium:0,roundVal:10e6,totalOpt:1e6,
-  reserve:.2,foYear:2,foStepUp:3,foSkill:0,
+  reserve:.2,foYear:2,foVal:30e6,foSkill:0,
   failLabel:"Failure",sh0:.7,failYearStart:2,
+  // exitVal = the old flat mult x roundVal (10e6), migrated so the derived multiple
+  // (exitVal/roundVal) matches the previous defaults exactly: 3x, 10x, 50x.
   outcomes:[
-    {label:"Solid outcome",share:.2,mult:3,exit:6},
-    {label:"Strong outcome",share:.08,mult:10,exit:7},
-    {label:"Outlier",share:.02,mult:50,exit:8},
+    {label:"Solid outcome",share:.2,exitVal:30e6,exit:6},
+    {label:"Strong outcome",share:.08,exitVal:100e6,exit:7},
+    {label:"Outlier",share:.02,exitVal:500e6,exit:8},
   ],
   redRate:.75,dConv:2,dRed:3,
   yld:.04,

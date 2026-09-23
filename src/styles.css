@@ -89,6 +89,8 @@ table.outtbl td.dim{color:var(--muted);text-align:center}
 table.outtbl .hint{font-weight:400;white-space:normal;max-width:20ch}
 table.outtbl input.cell{width:52px;font:inherit;border:1px solid var(--line);border-radius:5px;background:var(--sunk);color:var(--ink);padding:3px 4px}
 table.outtbl input.cell-label{width:100%;min-width:110px;font-weight:600;text-align:left}
+table.outtbl input.cell-exitval{width:92px}
+table.outtbl td.derived-mult{text-align:right;font-weight:600}
 table.outtbl td:last-child{padding-left:2px;padding-right:2px}
 table.outtbl tfoot td{font-weight:700;padding-top:8px}
 table.outtbl tfoot #outtotal.ok{color:var(--pos)}

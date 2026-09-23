@@ -8,26 +8,46 @@
 // workbook's own year numbering, where "year 1" is the year of the initial checks.
 export const YR = [1,2,3,4,5,6,7,8,9,10,11,12];
 
-// p.sh0 (share) is the failure bucket: no multiple, no exit -- it never returns
-// anything, so it only ever appears in write-off/redemption math. Every other
-// outcome bucket lives in p.outcomes, a user-editable array of
-// {label, share, mult, exit}, so the table can grow or shrink freely and each
-// row is looked up by array position instead of a fixed field name.
+// p.sh0 (share) is the failure bucket: no exit value, no exit year -- it never returns
+// anything, so it only ever appears in write-off/redemption math. Every other outcome
+// bucket lives in p.outcomes, a user-editable array of {label, share, exitVal, exit}, so
+// the table can grow or shrink freely and each row is looked up by array position instead
+// of a fixed field name. `exitVal` is the company's absolute value at exit; the multiple
+// used everywhere below is *derived*, not stored -- see `withMult`.
+export function outcomeMultiples(p){
+  return p.outcomes.map(o=>p.roundVal?o.exitVal/p.roundVal:0);
+}
+// Replaces each outcome's exitVal with a derived `mult` (exitVal / entry valuation) and
+// turns the follow-on valuation into a derived `foStepUp`, so the rest of the engine can
+// keep working in multiples exactly as before. The entry valuation is `roundVal` -- the
+// price the initial check bought in at. Keel's convertible enters at `premium` above that,
+// which is applied later wherever a K exit is computed (`/(1+p.premium)`), not here, so this
+// one multiple serves both strategies.
+function withMult(p){
+  const mults=outcomeMultiples(p);
+  return {...p,
+    outcomes:p.outcomes.map((o,i)=>({...o,mult:mults[i]})),
+    foStepUp:p.roundVal?p.foVal/p.roundVal:1};
+}
 const successMix=p=>p.outcomes.reduce((a,o)=>a+o.share*o.mult,0);
 // Total share of positions that don't fail -- i.e. the ones a fund could plausibly
 // follow on into or recycle capital into, since a failed company never raises again.
 const survivorShare=p=>p.outcomes.reduce((a,o)=>a+o.share,0);
 
 // Splits a follow-on/recycled pool (dollars) across outcome buckets, blending two
-// allocation styles by p.foSkill: an even split per surviving company (foSkill=0,
-// each bucket gets a slice proportional to its share of survivors) and a hindsight
-// split that already knows which companies will be the big winners (foSkill=1, each
-// bucket gets a slice proportional to its share of *eventual portfolio value*, i.e.
-// share*mult). Both weightings sum to 1, so the blend always allocates the whole pool
-// regardless of foSkill. Returns one dollar amount per outcome, aligned by array index.
-function allocate(p,survShare,valueMix,pool){
+// allocation styles by p.foSkill: an even split per company still eligible for the pool
+// (foSkill=0, each bucket gets a slice proportional to its share of `eligibleShare`) and a
+// hindsight split that already knows which companies will be the big winners (foSkill=1,
+// each bucket gets a slice proportional to its share of *eventual portfolio value*, i.e.
+// share*mult, which sums to 1 across survivors alone -- hindsight never wastes money on a
+// company it already knows will fail). `eligibleShare` can exceed `survShare`: some of the
+// pool may be earmarked for companies that are still alive (not yet recognised as failures)
+// at the time it's allocated but go on to fail anyway, in which case that slice is simply
+// never paid out -- the caller doesn't add it to any bucket, so it's lost, same as it would
+// be in reality. Returns one dollar amount per *surviving* outcome, aligned by array index.
+function allocate(p,eligibleShare,valueMix,pool){
   return p.outcomes.map(o=>{
-    const even=survShare>0?o.share/survShare:0;
+    const even=eligibleShare>0?o.share/eligibleShare:0;
     const hindsight=valueMix>0?(o.share*o.mult)/valueMix:0;
     return pool*((1-p.foSkill)*even+p.foSkill*hindsight);
   });
@@ -66,33 +86,49 @@ export function irr(cf){
 }
 
 export function derive(p){
+  p=withMult(p);
   const d={};
   d.I=p.F*(1-p.MF*p.MFY);
   d.checkPool=d.I*(1-p.reserve);
   d.foReserve=d.I*p.reserve;
   d.checkK=p.safeK+p.optK;
   d.survivorShare=survivorShare(p);
+  // Share of positions still "alive" (not yet recognised as failures -- see `failFrac`) at
+  // the moment the follow-on reserve is deployed. Some of the reserve is earmarked for
+  // these still-alive-but-doomed companies too, same as it would be in reality: a fund
+  // can't tell at foYear which of its not-yet-failed positions will fail later.
+  d.eligibleAtFoYear=d.survivorShare+p.sh0*failFrac(p,p.foYear);
 
   // SAFE only
   d.NT=p.checkT>0?d.checkPool/p.checkT:0;
   d.failedT=d.NT*p.sh0;
   d.successT=d.NT*p.checkT*successMix(p);
-  // Follow-on capital never goes into failures (a failed company doesn't raise a next
-  // round), and each company's follow-on tranche earns *that company's own* outcome
-  // multiple, discounted by the follow-on step-up -- see `allocate`/`foMult` above.
+  // Follow-on capital never goes into *known* failures (a failed company doesn't raise a
+  // next round), but it can still go into a company that hasn't failed *yet* at foYear and
+  // dies later -- see `eligibleAtFoYear`/`allocate`. Each surviving bucket's tranche earns
+  // *that company's own* outcome multiple, discounted by the follow-on step-up -- `foMult`.
   const valueMixT=successMix(p);
-  d.foAllocT=allocate(p,d.survivorShare,valueMixT,d.foReserve);
+  d.foAllocT=allocate(p,d.eligibleAtFoYear,valueMixT,d.foReserve);
   d.followOnValueT=p.outcomes.reduce((a,o,i)=>a+d.foAllocT[i]*foMult(p,o),0);
   d.grossT=d.successT+d.followOnValueT;
   d.writeOffT=d.failedT*p.checkT;
 
   // SAFE + Option
-  d.NK=d.checkK>0?d.checkPool/d.checkK:0;
+  d.feePerPos=p.keelFee*p.optK;
+  d.licence=0;
+  // Keel's fee is charged per position and per year, so it scales linearly with the check
+  // pool (via NK). Fees beyond the reserve used to just get called on top of the fund size
+  // instead of coming out of anything -- fixed by solving for the check pool that pays for
+  // itself: fees beyond the reserve now shrink the pool (fewer companies backed) instead of
+  // conjuring extra capital. totalFees = feeRate * checkPoolK is linear, so the break-even
+  // point has a closed form and doesn't need iterating.
+  const feeYears=(1-p.sh0*p.redRate)*p.dConv+p.sh0*p.redRate*p.dRed;
+  const feeRate=d.checkK>0?d.feePerPos*feeYears/d.checkK:0;
+  d.checkPoolK=feeRate*d.checkPool>d.foReserve?(d.checkPool+d.foReserve)/(1+feeRate):d.checkPool;
+  d.NK=d.checkK>0?d.checkPoolK/d.checkK:0;
   d.failedK=d.NK*p.sh0;
   d.redeemedK=d.failedK*p.redRate;
   d.convertedK=d.NK-d.redeemedK;
-  d.feePerPos=p.keelFee*p.optK;
-  d.licence=0;
   d.totalFees=d.convertedK*d.feePerPos*p.dConv+d.redeemedK*d.feePerPos*p.dRed;
   d.foReserveK=Math.max(0,d.foReserve-d.totalFees);
   // All reserve yield goes to the company (see docs/model-spec.md), so redemption recovers
@@ -102,12 +138,16 @@ export function derive(p){
   d.distFromRed=d.recovered-d.recycled;
   d.successK=d.NK*d.checkK*successMix(p);
   const valueMixK=successMix(p);
-  d.foAllocK=allocate(p,d.survivorShare,valueMixK,d.foReserveK);
+  d.foAllocK=allocate(p,d.eligibleAtFoYear,valueMixK,d.foReserveK);
   d.followOnValueK=p.outcomes.reduce((a,o,i)=>a+d.foAllocK[i]*foMult(p,o),0);
-  // Recycled capital gets the same allocation and step-up treatment as the primary
-  // follow-on reserve -- it's deployed the same way (into winners' next round) -- but
-  // it's a separate pool because it's called at a different year (dRed, not foYear).
+  // Recycled capital, unlike the primary reserve, is only ever earmarked once a failure has
+  // already been redeemed -- there's no "not yet known" case for it, so it still allocates
+  // across survivors alone (eligibleAtFoYear doesn't apply). But if there are no survivors
+  // at all to recycle into, the pool must not just vanish: whatever allocate() can't place
+  // (recAllocK sums to less than d.recycled) gets paid straight to LPs instead.
   d.recAllocK=allocate(p,d.survivorShare,valueMixK,d.recycled);
+  d.recycledActual=d.recAllocK.reduce((a,v)=>a+v,0);
+  d.distFromRed+=d.recycled-d.recycledActual;
   d.recycledValueK=p.outcomes.reduce((a,o,i)=>a+d.recAllocK[i]*foMult(p,o),0);
   d.grossK=d.successK/(1+p.premium)+d.followOnValueK+d.distFromRed+d.recycledValueK;
   d.writeOffK=d.failedK*p.safeK+(d.failedK-d.redeemedK)*p.optK+d.totalFees;
@@ -151,6 +191,7 @@ export function metrics(p,paid,dist,nav){
 }
 
 export function run(p){
+  p=withMult(p);
   const d=derive(p);
   const N=YR.length;
   const mg=t=>t<p.MFY?p.F*p.MF:0;
@@ -177,7 +218,7 @@ export function run(p){
     T.nav[t]=n;
 
     // ---- SAFE + Option ----
-    a=mg(t); b=(t===0?d.checkPool:0)+(t===p.foYear?d.foReserveK:0);
+    a=mg(t); b=(t===0?d.checkPoolK:0)+(t===p.foYear?d.foReserveK:0);
     const fee=(t===0?d.licence:0)+(t<p.dConv?d.convertedK*d.feePerPos:0)+(t<p.dRed?d.redeemedK*d.feePerPos:0);
     R(K,"Management fees called",t,a); R(K,"Capital called for investments",t,b); R(K,"Keel fees",t,fee);
     K.paid[t]=a+b+fee;
@@ -211,7 +252,7 @@ export function run(p){
   out.writeOffK=d.writeOffK;
   out.feesK=d.totalFees;
   out.feesPctK=p.F?d.totalFees/p.F:0;
-  out.recycledK=d.recycled;
+  out.recycledK=d.recycledActual;
   out.distFromRedK=d.distFromRed;
   out.recoveredK=d.recovered;
   return out;
@@ -221,6 +262,7 @@ export function run(p){
 export function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 
 export function monte(p,runs){
+  p=withMult(p);
   const d=derive(p), rnd=rng(42);
   const N=YR.length;
   const NT=Math.max(1,Math.round(d.NT)), NK=Math.max(1,Math.round(d.NK));
@@ -237,22 +279,25 @@ export function monte(p,runs){
 
   // Same even/hindsight blend as `allocate` in derive(), but over this run's *actual*
   // drawn counts rather than the expected shares -- a lucky run with more survivors in
-  // a bucket spreads that bucket's slice thinner, same as it would in reality.
-  const allocRun=(counts,survivors,pool)=>{
+  // a bucket spreads that bucket's slice thinner, same as it would in reality. `eligible`
+  // is the even-split denominator (can include not-yet-failed companies that die later,
+  // same as `eligibleAtFoYear` in derive()); the hindsight split is always survivors-only.
+  const allocRun=(counts,eligible,pool)=>{
     const sumCountMult=p.outcomes.reduce((a,o,i)=>a+counts[i+1]*o.mult,0);
     return p.outcomes.map((o,i)=>{
-      const even=survivors>0?counts[i+1]/survivors:0;
+      const even=eligible>0?counts[i+1]/eligible:0;
       const hindsight=sumCountMult>0?(counts[i+1]*o.mult)/sumCountMult:0;
       return pool*((1-p.foSkill)*even+p.foSkill*hindsight);
     });
   };
+  const aliveAtFoYear=failFrac(p,p.foYear);
 
   const resT=[],resK=[],irrT=[],irrK=[];
   for(let r=0;r<runs;r++){
     const cT=draw(NT), cK=draw(NK);
 
     const survivorsT=NT-cT[0];
-    const foAllocT=allocRun(cT,survivorsT,d.foReserve);
+    const foAllocT=allocRun(cT,survivorsT+cT[0]*aliveAtFoYear,d.foReserve);
     const distT=new Array(N).fill(0);
     p.outcomes.forEach((o,i)=>{if(o.exit<N) distT[o.exit]+=cT[i+1]*p.checkT*o.mult+foAllocT[i]*foMult(p,o)});
     let cgd=0,lpcPrev=0;const netT=new Array(N);
@@ -265,14 +310,16 @@ export function monte(p,runs){
     const foReserveK=Math.max(0,d.foReserve-totalFees);
     const recovered=redeemedK*p.optK;
     const recycled=recovered*p.recShare;
-    const distFromRed=recovered-recycled;
     const survivorsK=NK-cK[0];
-    const foAllocK=allocRun(cK,survivorsK,foReserveK);
+    const foAllocK=allocRun(cK,survivorsK+cK[0]*aliveAtFoYear,foReserveK);
     const recAllocK=allocRun(cK,survivorsK,recycled);
+    // Nothing to recycle into (no survivors) -> pay it out instead of losing it, same fix
+    // as derive()'s d.distFromRed.
+    const distFromRed=recovered-recAllocK.reduce((a,v)=>a+v,0);
 
     const paidK=new Array(N).fill(0), distK=new Array(N).fill(0);
     for(let t=0;t<N;t++){
-      const a=mg(t), b=(t===0?d.checkPool+d.licence:0)+(t===p.foYear?foReserveK:0);
+      const a=mg(t), b=(t===0?d.checkPoolK+d.licence:0)+(t===p.foYear?foReserveK:0);
       const fee=(t<p.dConv?convertedK*d.feePerPos:0)+(t<p.dRed?redeemedK*d.feePerPos:0);
       paidK[t]=a+b+fee;
     }

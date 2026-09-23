@@ -5,19 +5,26 @@ across the portfolio, so position counts can be fractional. The Monte Carlo sect
 exception: it draws whole positions at random.
 
 Two strategies are compared, both funded from the same fund and the same outcome distribution.
-The failure bucket is fixed (`sh0`, `failLabel` — no multiple or exit, since it never returns
-anything); every other outcome lives in `outcomes`, a freely editable array of
-`{label, share, mult, exit}`. Rows can be added, removed or renamed — the engine iterates the
-array, so its length isn't fixed anywhere.
+The failure bucket is fixed (`sh0`, `failLabel` — no exit value or exit year, since it never
+returns anything); every other outcome lives in `outcomes`, a freely editable array of
+`{label, share, exitVal, exit}`. Rows can be added, removed or renamed — the engine iterates the
+array, so its length isn't fixed anywhere. `exitVal` is the company's absolute value at exit;
+each bucket's *multiple* is never stored, it's derived as `exitVal / roundVal` (`outcomeMultiples`
+in engine.js) and used everywhere internally exactly like the old raw multiple was — see
+`withMult`. `roundVal` (entry valuation, post-money) is therefore **not informational any more**:
+it's the denominator of every outcome's multiple, so changing it moves returns on purpose. It's
+also still shown in the founder view for dilution context.
 
 - **SAFE only:** every position is a single unprotected SAFE (`checkT`), independent of the
-  SAFE + Keel check size below.
+  SAFE + Keel check size below. Each outcome's multiple for T is `exitVal / roundVal`.
 - **SAFE + Keel:** every position splits into an unprotected SAFE (`safeK`) plus a Keel
   convertible (`optK`). It redeems if the company fails (subject to the redemption rate) and
-  converts, at a possible valuation premium, if it succeeds. `roundVal` (round valuation) and
-  `totalOpt` (total convertible amount across every protected investor in the round) are
-  informational only — shown in the founder view, and don't feed into either strategy's
-  returns, since the model has no cap-table/dilution mechanics.
+  converts, at a possible valuation premium, if it succeeds — i.e. K's entry valuation is
+  `roundVal × (1 + premium)`, applied as `/(1+premium)` on K's exit value rather than as a
+  separate multiple, so the same derived `mult` serves both strategies. `totalOpt` (total
+  convertible amount across every protected investor in the round) is still informational
+  only — shown in the founder view, and doesn't feed into either strategy's returns, since the
+  model has no cap-table/dilution mechanics.
 
 ## Timeline
 
@@ -30,21 +37,33 @@ Modelling a staggered vintage properly would mean moving the whole engine to mon
 resolution (every formula here is keyed off a single check date) — a possible future change,
 not attempted as a partial fix.
 
-**Follow-ons and recycled capital are attributed per surviving company, riding that company's
-own outcome — at a discount for entering later.** The reserve (and, for SAFE + Keel, recycled
-capital) is split across every surviving company by `allocate()`, which blends two allocation
-styles via `foSkill` (0–1): an *even* split, where each bucket's slice is proportional to its
-share of survivors (`foSkill = 0`, the old default behaviour), and a *hindsight* split, where
+**Follow-ons and recycled capital are attributed per company, riding that company's own
+outcome — at a discount for entering later, and with some of it genuinely lost.** The reserve
+is split across every position still *eligible* at `foYear` by `allocate()`, which blends two
+allocation styles via `foSkill` (0–1): an *even* split, where each bucket's slice is
+proportional to its share of `eligibleAtFoYear` (`foSkill = 0`), and a *hindsight* split, where
 each bucket's slice is proportional to its share of eventual portfolio value (`share × mult`,
-`foSkill = 1`) — as if the fund could already tell which companies would be the big winners and
-concentrated its follow-on dollars there. Each bucket's follow-on tranche then earns *that
-bucket's own* `mult`, divided by `foStepUp` (default 3x), and pays out in *that bucket's own*
-`exit` year. The division models a real dynamic the flat-multiple design couldn't: a follow-on
-dollar buys in at a higher price than the initial check (the step-up), so it only captures a
-fraction of the same exit. There's no separate follow-on exit-year input — the money simply
+`foSkill = 1`, survivors only) — as if the fund could already tell which companies would be the
+big winners and concentrated its follow-on dollars there, never wasting money on a company it
+already knows will fail. `eligibleAtFoYear = survivorShare + sh0 × failFrac(foYear)`: the
+failure bucket isn't excluded outright, because a company that hasn't been *recognised* as a
+failure yet (see Marks below) can still receive follow-on money and then die anyway — whatever
+lands there is simply never paid out, i.e. lost, same as it would be in reality. This is why
+`reserve` no longer makes returns monotonically better the higher it goes: push it up and more
+of it lands on companies that turn out to be duds. Recycled capital gets the same step-up/exit
+treatment but always allocates across *survivors only* (no eligibility dilution) — by the time
+it's deployed (`dRed`), a redeemed failure has already been recognised as dead, so there's no
+"not yet known" case for it. If recycled capital has nowhere to go at all (no survivors),
+`allocate()` returns zero for every bucket; the undistributed amount is paid straight to LPs
+(`distFromRed`) instead of silently vanishing.
+
+Each bucket's follow-on tranche earns *that bucket's own* `mult`, divided by `foStepUp`, and
+pays out in *that bucket's own* `exit` year. The division models a real dynamic a flat multiple
+couldn't: a follow-on dollar buys in at a higher price than the initial check (the step-up), so
+it only captures a fraction of the same exit. `foStepUp` isn't its own input either — it's
+derived the same way as an outcome's multiple, as `foVal / roundVal` (`foVal` is the follow-on
+round's post-money valuation). There's no separate follow-on exit-year input — the money simply
 rides along with whichever company it went into, using the Outcomes table that's already there.
-This replaced an earlier design with a single blended `foMult`/`foExit` (and, before that, a
-separate `recMult`/`recExit`) applied to the whole pool with no per-company attribution at all.
 
 - **Year 1:** initial checks. Management fees are charged for `MFY` years starting here.
 - **Years 1 to `dConv`:** Keel charges its annual fee on positions still protected and
@@ -64,15 +83,27 @@ separate `recMult`/`recExit`) applied to the whole pool with no per-company attr
 | Symbol | Meaning | Formula |
 |---|---|---|
 | I | Investable capital | F × (1 − MF × MFY) |
-| checkPool | Capital for initial checks | I × (1 − reserve) |
+| checkPool | Capital for initial checks (T, and K before the fee floor below) | I × (1 − reserve) |
 | foReserve | Follow-on reserve | I × reserve |
 | checkK | SAFE + Keel check size | safeK + optK |
-| NT, NK | Positions backed | checkPool / checkT, checkPool / checkK |
+| eligibleAtFoYear | Share of positions still eligible for the reserve at `foYear` | survivorShare + sh0 × failFrac(p, foYear) |
+| checkPoolK | K's actual check pool, after the fee floor | see "Fees never exceed the fund" below |
+| NT, NK | Positions backed | checkPool / checkT, checkPoolK / checkK |
 | feePerPos | Keel's annual fee per position | `keelFee` × `optK` (a single flat annual rate on the protected balance) |
 | totalFees | Total Keel fees | convertedK × feePerPos × dConv + redeemedK × feePerPos × dRed |
 | recovered | Capital recovered via redemption | redeemedK × optK (100% of reserve yield goes to the company, so no yield boost on the fund's recovery) |
-| recycled | Recycled into winners' next round | recovered × recShare (uncapped) |
+| recycled | Recycled into winners' next round | recovered × recShare (uncapped), minus whatever `allocate()` can't place (paid to LPs instead) |
 | foAllocT/K[i], recAllocK[i] | Dollars of the reserve/recycled pool allocated to outcome bucket i | `allocate()` — see the Timeline section above |
+
+**Fees never exceed the fund.** `totalFees` scales linearly with `NK` (and so with the check
+pool), so `totalFees = feeRate × checkPoolK` for a constant `feeRate` derived from `keelFee`,
+`dConv`, `dRed` and `redRate`. If the *unshrunk* fee (`feeRate × checkPool`) would exceed
+`foReserve`, the model solves the break-even point in closed form —
+`checkPoolK = (checkPool + foReserve) / (1 + feeRate)` — instead of calling the shortfall as
+extra capital on top of the fund size. In other words, fees beyond the reserve shrink the
+number of companies K backs; they never conjure capital the fund doesn't have. At default
+inputs the unshrunk fee fits inside the reserve, so `checkPoolK == checkPool` and this never
+triggers — it only matters at higher `keelFee`/lower `reserve` combinations.
 
 `convertedK` is every position that is *not* redeemed (successes plus unredeemed failures) —
 it keeps accruing the Keel fee until the conversion decision at year `dConv`.
