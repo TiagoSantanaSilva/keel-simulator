@@ -10,8 +10,12 @@
 // never returns anything) plus a user-editable, freely add/removable list of outcome
 // buckets in DEF.outcomes ({label, share, exitVal, exit}). There's no fixed set of fields
 // for the success buckets -- the array can be any length, which is what lets the table grow
-// or shrink. Each bucket's multiple isn't stored -- it's derived in engine.js as
-// exitVal / roundVal (see outcomeMultiples/withMult) and shown read-only in the table.
+// or shrink. Each bucket's multiple isn't stored or shown -- it's derived in engine.js as
+// exitVal / roundVal (see outcomeMultiples/withMult) and used internally only.
+//
+// `roundVal`, despite sitting in the "checks" (K-section) group below for familiarity,
+// isn't K-specific -- it's every outcome's entry valuation for *both* strategies (see its
+// hint). This is the one input whose UI placement doesn't match its `section`.
 
 export const G = [
  {id:"fund",section:"shared",title:"Fund",open:true,f:[
@@ -19,8 +23,7 @@ export const G = [
   ["MFY","Management fee period (years)",5,12,1,"n"],
   ["MF","Management fee (annual)",0,.05,.0025,"pct"],
   ["carry","Carried interest",0,.3,.05,"pct"]]},
- {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[
-  ["roundVal","Entry valuation (post-money, at the initial check)",1e6,100e6,500e3,"usd","Each outcome's multiple below is its exit value ÷ this. Keel's convertible enters at the premium above it (see Keel pricing)."]]},
+ {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[]},
  {id:"fo",section:"shared",title:"Follow-on reserve (same for both strategies)",f:[
   ["reserve","Follow-on reserve (% of investable capital)",0,.5,.01,"pct","More reserve means fewer initial checks. Raises variance either way — see Monte Carlo below."],
   ["foYear","Follow-ons deployed (years after initial check)",0,6,1,"yr","When follow-on money goes into surviving companies."],
@@ -34,6 +37,7 @@ export const G = [
   ["safeK","SAFE amount",0,3e6,25e3,"usd"],
   ["optK","Convertible amount",0,3e6,25e3,"usd","The protected part. Redeemable if the company fails, converts if it succeeds."],
   ["premium","Valuation premium on convertible rounds",0,.4,.01,"pct","0% = same price as a normal round."],
+  ["roundVal","Round valuation (post-money)",1e6,100e6,500e3,"usd","The entry price for every outcome's multiple in the Outcomes table above, for both strategies — not just SAFE + Keel."],
   ["totalOpt","Total convertible amount in the round",0,10e6,50e3,"usd","Across every protected investor, not just this fund. For the founder view."]]},
  {id:"dec",section:"K",title:"Keel decisions",open:true,f:[
   ["redRate","Redemption rate (failures redeemed before converting)",0,1,.05,"pct"],

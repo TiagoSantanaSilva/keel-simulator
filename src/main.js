@@ -89,47 +89,33 @@ function buildControls(){
         ${hint?`<div class="hint" id="h_${k}">${hint}</div>`:""}`;
       det.appendChild(w);
       const inp=w.querySelector("input");
-      inp.addEventListener("input",()=>{S[k]=parseFloat(inp.value); paintOut(k,f); if(k==="roundVal") refreshOutcomeMultiples(); schedule()});
+      inp.addEventListener("input",()=>{S[k]=parseFloat(inp.value); paintOut(k,f); schedule()});
     });
     host.appendChild(det);
   });
   G.forEach(g=>g.f.forEach(([k,,,,,f])=>paintOut(k,f)));
   paintOutcomesTable();
 }
-let outcomesWrap=null;
 function buildOutcomesTable(){
   const wrap=document.createElement("div"); wrap.className="outwrap";
-  outcomesWrap=wrap;
   renderOutcomesRows(wrap);
   return wrap;
 }
-// The derived multiple column depends on S.roundVal, which lives on its own slider outside
-// this table -- moving it needs to repaint the read-only multiples without rebuilding the
-// whole table (which would drop focus from whatever the user is mid-typing elsewhere).
-function refreshOutcomeMultiples(){
-  if(!outcomesWrap) return;
-  outcomesWrap.querySelectorAll(".derived-mult").forEach((cell,i)=>{
-    const o=S.outcomes[i];
-    cell.textContent=(S.roundVal?o.exitVal/S.roundVal:0).toFixed(1)+"x";
-  });
-}
 function renderOutcomesRows(wrap){
-  const mult=o=>S.roundVal?o.exitVal/S.roundVal:0;
-  let h=`<table class="outtbl"><thead><tr><th>Outcome</th><th>Share</th><th>Exit value</th><th>Multiple</th><th>Exit year</th><th></th></tr></thead><tbody>`;
+  let h=`<table class="outtbl"><thead><tr><th>Outcome</th><th>Share</th><th>Exit value ($M)</th><th>Exit year</th><th></th></tr></thead><tbody>`;
   h+=`<tr><td><input type="text" class="cell cell-label" id="in_failLabel" value="${S.failLabel}"></td>
     <td><input type="number" class="cell" id="in_sh0" min="0" max="100" step="1" value="${Math.round(S.sh0*100)}"> %</td>
-    <td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td></td></tr>`;
+    <td class="dim">—</td><td class="dim">—</td><td></td></tr>`;
   S.outcomes.forEach((o,i)=>{
     h+=`<tr>
       <td><input type="text" class="cell cell-label" data-i="${i}" data-f="label" value="${o.label}"></td>
       <td><input type="number" class="cell" data-i="${i}" data-f="share" min="0" max="100" step="1" value="${Math.round(o.share*100)}"> %</td>
-      <td><input type="number" class="cell cell-exitval" data-i="${i}" data-f="exitVal" min="0" step="100000" value="${o.exitVal}"></td>
-      <td class="dim derived-mult">${mult(o).toFixed(1)}x</td>
+      <td><input type="number" class="cell cell-exitval" data-i="${i}" data-f="exitVal" min="0" step="0.5" value="${o.exitVal/1e6}"></td>
       <td><input type="number" class="cell" data-i="${i}" data-f="exit" min="1" max="11" step="1" value="${o.exit}"></td>
       <td><button type="button" class="rowdel" data-i="${i}" aria-label="Remove ${o.label}">×</button></td>
     </tr>`;
   });
-  h+=`</tbody><tfoot><tr><td>Total</td><td id="outtotal" colspan="5"></td></tr></tfoot></table>
+  h+=`</tbody><tfoot><tr><td>Total</td><td id="outtotal" colspan="4"></td></tr></tfoot></table>
     <button type="button" class="btn ghost outadd" id="outadd">+ Add outcome</button>`;
   wrap.innerHTML=h;
 
@@ -140,8 +126,8 @@ function renderOutcomesRows(wrap){
       const i=+inp.dataset.i, f=inp.dataset.f;
       if(f==="label") S.outcomes[i].label=inp.value;
       else if(f==="share"){ S.outcomes[i].share=parseFloat(inp.value||0)/100; paintOutcomesTable(); }
-      else{ S.outcomes[i][f]=parseFloat(inp.value||0);
-        if(f==="exitVal"){ const row=inp.closest("tr"); row.querySelector(".derived-mult").textContent=mult(S.outcomes[i]).toFixed(1)+"x"; } }
+      else if(f==="exitVal") S.outcomes[i].exitVal=parseFloat(inp.value||0)*1e6;
+      else S.outcomes[i][f]=parseFloat(inp.value||0);
       schedule();
     });
   });
@@ -284,9 +270,14 @@ function renderHist(mc){
 }
 function renderBox(mc,hi){
   const small=window.matchMedia("(max-width:560px)").matches;
+  // Axis text (ticks/title) needs the same big bump as the other mobile charts to stay
+  // legible. Row-name labels ("SAFE + Keel") are handled separately: at the axis font size
+  // they're wide enough to overflow past x=0 and get clipped by the viewBox, so they get
+  // their own smaller size and a left margin sized to actually fit them.
   const fs=small?32:11;
-  const m={l:small?110:72,r:14,t:small?24:14,b:small?46:30};
-  const rowH=small?130:80, gap=small?24:16, boxH=rowH*.34;
+  const rowFs=small?22:13;
+  const m={l:small?168:112,r:16,t:small?28:20,b:small?52:38};
+  const rowH=small?150:110, gap=small?30:22, boxH=rowH*.3;
   const W=760, H=m.t+m.b+rowH*2+gap;
   const x=v=>m.l+v*(W-m.l-m.r)/hi;
   const rowY=[m.t+rowH/2, m.t+rowH+gap+rowH/2];
@@ -294,20 +285,20 @@ function renderBox(mc,hi){
   const tickStep=hi>4?1:.5;
   for(let v=0;v<=hi+1e-9;v+=tickStep){
     g+=`<line x1="${x(v)}" x2="${x(v)}" y1="${m.t-4}" y2="${H-m.b+4}" stroke="var(--line)"/>`;
-    g+=`<text x="${x(v)}" y="${H-m.b+22}" text-anchor="middle" style="font-size:${fs}px">${v}x</text>`;
+    g+=`<text x="${x(v)}" y="${H-m.b+28}" text-anchor="middle" style="font-size:${fs}px">${v}x</text>`;
   }
-  g+=`<text x="${(m.l+W-m.r)/2}" y="${H-4}" text-anchor="middle" style="fill:var(--muted);font-size:${fs}px">Net TVPI (money multiple returned to LPs)</text>`;
+  g+=`<text x="${(m.l+W-m.r)/2}" y="${H-6}" text-anchor="middle" style="fill:var(--muted);font-size:${fs}px">Net TVPI (money multiple returned to LPs)</text>`;
   if(hi>1) g+=`<line x1="${x(1)}" x2="${x(1)}" y1="${m.t-4}" y2="${H-m.b+4}" stroke="var(--water)" stroke-dasharray="5 4" stroke-width="1.5"/>`;
   ["T","K"].forEach((k,i)=>{
     const s=mc[k], cy=rowY[i], col=COL[k];
-    g+=`<text x="${m.l-12}" y="${cy+4}" text-anchor="end" style="fill:${col};font-weight:700;font-size:${fs}px">${NAME[k]}</text>`;
+    g+=`<text x="${m.l-16}" y="${cy+5}" text-anchor="end" style="fill:${col};font-weight:700;font-size:${rowFs}px">${NAME[k]}</text>`;
     g+=`<line x1="${x(s.p10)}" x2="${x(s.q1)}" y1="${cy}" y2="${cy}" stroke="${col}" stroke-width="1.5"/>`;
     g+=`<line x1="${x(s.q3)}" x2="${x(s.p90)}" y1="${cy}" y2="${cy}" stroke="${col}" stroke-width="1.5"/>`;
     g+=`<line x1="${x(s.p10)}" x2="${x(s.p10)}" y1="${cy-boxH/3}" y2="${cy+boxH/3}" stroke="${col}" stroke-width="1.5"/>`;
     g+=`<line x1="${x(s.p90)}" x2="${x(s.p90)}" y1="${cy-boxH/3}" y2="${cy+boxH/3}" stroke="${col}" stroke-width="1.5"/>`;
     g+=`<rect x="${x(s.q1)}" y="${cy-boxH/2}" width="${Math.max(1,x(s.q3)-x(s.q1))}" height="${boxH}" fill="${col}" fill-opacity=".25" stroke="${col}" stroke-width="1.5"/>`;
     g+=`<line x1="${x(s.p50)}" x2="${x(s.p50)}" y1="${cy-boxH/2}" y2="${cy+boxH/2}" stroke="${col}" stroke-width="2.5"/>`;
-    g+=`<text x="${x(s.p50)}" y="${cy-boxH/2-6}" text-anchor="middle" style="fill:${col};font-weight:700;font-size:${fs}px">${s.p50.toFixed(2)}x</text>`;
+    g+=`<text x="${x(s.p50)}" y="${cy-boxH/2-10}" text-anchor="middle" style="fill:${col};font-weight:700;font-size:${rowFs}px">${s.p50.toFixed(2)}x</text>`;
   });
   $("box").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Interquartile range of net TVPI across simulated funds, SAFE only vs SAFE + Keel">${g}</svg>`;
 }
@@ -316,15 +307,19 @@ function renderFounder(){
   const fmtVal=(v,f)=>f==="pct"?fmt.pct1(v):f==="n"?v.toFixed(1):fmt.usdFull(v);
   // Each row is [label, value, format?, hero?]. The hero row gets a large, coloured
   // headline treatment; everything else sits in a compact two-column grid below it.
+  // "Fund POV" cards are what the company receives from *this one fund's* check alone;
+  // "Company POV" cards are the same moment but totalled across every protected investor
+  // in the round -- two different zoom levels on the same event, not two different events.
   const cards=[
-    ["Normal round",["SAFE only",[["Cash at close",p.checkT],["Dilution at this round's valuation",dil(p.checkT),"pct"],["Total capital received",p.checkT,null,true]]]],
-    ["If the company succeeds",["SAFE + Keel",[["Cash at close",p.safeK],["Converts after "+p.dConv+" years",p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution, "+p.dConv+"y",p.yld*p.optK*p.dConv],["Converted round-wide (all investors)",p.totalOpt],["Yield earned round-wide, "+p.dConv+"y",p.yld*p.totalOpt*p.dConv],["Total capital received",p.safeK+p.optK+p.yld*p.totalOpt*p.dConv,null,true]]]],
-    ["If the company fails",["SAFE + Keel",[["Cash at close",p.safeK],["Redeemed after "+p.dRed+" years (received by the fund)",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["This fund's yield contribution, "+p.dRed+"y",p.yld*p.optK*p.dRed],["Redeemed round-wide, "+p.dRed+"y (received by all investors)",p.totalOpt*p.redRate],["Yield earned round-wide, "+p.dRed+"y",p.yld*p.totalOpt*p.dRed],["Total capital received",p.safeK+p.optK*keepConv+p.yld*p.totalOpt*p.dRed,null,true]]]],
-    ["Across the whole round",["All protected investors",[["Round valuation (post-money)",p.roundVal],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],["Total convertible amount in the round",p.totalOpt,null,true]]]]];
-  $("founder").innerHTML=cards.map(([t,[badge,rows]])=>{
+    ["Normal round","wide",["SAFE only",[["Cash at close",p.checkT],["Dilution at this round's valuation",dil(p.checkT),"pct"],["Total capital received",p.checkT,null,true]]]],
+    ["If the company succeeds","succeed",["Fund POV",[["Cash at close",p.safeK],["Converts after "+p.dConv+" years",p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution, "+p.dConv+"y",p.yld*p.optK*p.dConv],["Total capital received",p.safeK+p.optK+p.yld*p.optK*p.dConv,null,true]]]],
+    ["If the company succeeds","succeed",["Company POV",[["Round valuation (post-money)",p.roundVal],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],["Yield earned round-wide, "+p.dConv+"y",p.yld*p.totalOpt*p.dConv],["Total received round-wide",p.totalOpt+p.yld*p.totalOpt*p.dConv,null,true]]]],
+    ["If the company fails","fail",["Fund POV",[["Cash at close",p.safeK],["Redeemed after "+p.dRed+" years (received by the fund)",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["This fund's yield contribution, "+p.dRed+"y",p.yld*p.optK*p.dRed],["Total capital received",p.safeK+p.optK*keepConv+p.yld*p.optK*p.dRed,null,true]]]],
+    ["If the company fails","fail",["Company POV",[["Round valuation (post-money)",p.roundVal],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Redeemed round-wide (received by all investors)",p.totalOpt*p.redRate],["Yield earned round-wide, "+p.dRed+"y",p.yld*p.totalOpt*p.dRed],["Total kept by the company round-wide",p.totalOpt*keepConv+p.yld*p.totalOpt*p.dRed,null,true]]]]];
+  $("founder").innerHTML=cards.map(([t,kind,[badge,rows]])=>{
     const hero=rows.find(r=>r[3]), rest=rows.filter(r=>!r[3]);
-    return `<div class="founder">
-      <div class="founderhd"><h3>${t}</h3><span class="fbadge">${badge}</span></div>
+    return `<div class="founder founder-${kind}">
+      <div class="founderhd"><h3>${t}</h3><span class="fbadge fbadge-${kind}">${badge}</span></div>
       ${hero?`<div class="fhero"><div class="fherolabel">${hero[0]}</div><div class="fheroval">${fmtVal(hero[1],hero[2])}</div></div>`:""}
       <div class="ftiles">${rest.map(([a,v,f])=>`<div class="ftile"><div class="flabel">${a}</div><div class="fval">${fmtVal(v,f)}</div></div>`).join("")}</div>
     </div>`;
