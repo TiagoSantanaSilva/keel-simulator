@@ -11,13 +11,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
-<div class="app">
+<div class="app" id="app">
 <aside class="rail" aria-label="Assumptions">
   <div class="brand"><img src="/src/logo.png" alt="" class="logo"><b>Keel</b><span>VC Model</span><button type="button" class="themebtn" id="themebtn" aria-label="Switch between day and night layout"></button></div>
   <div class="note">Change any assumption. Every number on the page updates.</div>
   <div id="controls"></div>
   <div class="warn" id="warn" role="status"></div>
 </aside>
+<div class="railResize" id="railResize" role="separator" aria-orientation="vertical" aria-label="Resize the assumptions sidebar" tabindex="0"></div>
 
 <main>
   <h1 id="headline">What a $50M seed fund returns to its LPs</h1>

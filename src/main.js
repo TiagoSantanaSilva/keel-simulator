@@ -31,6 +31,40 @@ applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"dark":"
 $("themebtn").addEventListener("click",()=>{
   applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");
 });
+
+/* ---------------- sidebar resize ---------------- */
+const RAIL_KEY="keel-sim-rail-w", RAIL_MIN=260, RAIL_MAX=560;
+(function initRailResize(){
+  const handle=$("railResize"), app=$("app");
+  if(!handle||!app) return;
+  const setW=w=>{
+    w=Math.max(RAIL_MIN,Math.min(RAIL_MAX,w));
+    app.style.setProperty("--rail-w",w+"px");
+    return w;
+  };
+  try{const saved=parseFloat(localStorage.getItem(RAIL_KEY));if(!isNaN(saved))setW(saved)}catch(e){}
+  let dragging=false;
+  handle.addEventListener("pointerdown",e=>{
+    dragging=true; handle.classList.add("dragging");
+    handle.setPointerCapture(e.pointerId);
+    document.body.style.userSelect="none";
+  });
+  handle.addEventListener("pointermove",e=>{
+    if(!dragging) return;
+    const w=setW(e.clientX-app.getBoundingClientRect().left);
+    try{localStorage.setItem(RAIL_KEY,w)}catch(err){}
+  });
+  const stop=()=>{dragging=false; handle.classList.remove("dragging"); document.body.style.userSelect=""};
+  handle.addEventListener("pointerup",stop);
+  handle.addEventListener("pointercancel",stop);
+  handle.addEventListener("keydown",e=>{
+    const cur=parseFloat(getComputedStyle(app).getPropertyValue("--rail-w"))||340;
+    if(e.key==="ArrowLeft"){setW(cur-20); e.preventDefault()}
+    else if(e.key==="ArrowRight"){setW(cur+20); e.preventDefault()}
+    else return;
+    try{localStorage.setItem(RAIL_KEY,parseFloat(getComputedStyle(app).getPropertyValue("--rail-w")))}catch(err){}
+  });
+})();
 const SECTION={shared:["Shared assumptions",null],
   T:["SAFE only",null],K:["SAFE + Keel",null]};
 function buildControls(){
