@@ -189,7 +189,7 @@ function renderStats(r){
     ["DPI / RVPI at year 4","Cash already distributed vs. unrealised value, per dollar paid in.",o=>o,o=>o.dpi[3].toFixed(2)+" / "+o.rvpi[3].toFixed(2)],
     ["DPI / RVPI at year 6","Same, four years further into the fund's life.",o=>o,o=>o.dpi[5].toFixed(2)+" / "+o.rvpi[5].toFixed(2)],
     ["Capital lost in failures","Principal not recovered when a company fails (Keel: after fees).",(o,k)=>k==="T"?r.writeOffT:r.writeOffK,fmt.usd],
-    ["Seed positions backed","Expected number of companies funded from the initial check pool.",(o,k)=>k==="T"?r.d.NT:r.d.NK,v=>v.toFixed(1)],
+    ["Seed positions backed","Expected number of companies funded from the initial check pool.",(o,k)=>k==="T"?r.d.NT:r.d.NK,v=>String(Math.round(v))],
   ];
   let h=s.map(([t,def,fn,f])=>`<div class="stat"><h3>${t}</h3><div class="kpidef">${def}</div>${trio(r,fn,f)}</div>`).join("");
   h+=`<div class="stat stat-wide"><h3>Keel: recovered from failures</h3><div class="kpidef">Redeemed protected capital, split between recycling and an LP distribution.</div>
@@ -316,9 +316,9 @@ function renderFounder(){
   const cards=[
     ["Normal round","wide",["SAFE only",[["Cash at close",p.checkT],["Dilution at this round's valuation",dil(p.checkT),"pct"],["Total capital received",p.checkT,null,true]]]],
     ["If the company succeeds","succeed",["Fund POV",[["Cash at close",p.safeK],["Converts after "+p.dConv+" years",p.optK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["This fund's yield contribution, "+p.dConv+"y",p.yld*p.optK*p.dConv],["Total capital received",p.safeK+p.optK+p.yld*p.optK*p.dConv,null,true]]]],
-    ["If the company succeeds","succeed",["Company POV",[["Round valuation (post-money)",p.roundVal],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],["Yield earned round-wide, "+p.dConv+"y",p.yld*p.totalOpt*p.dConv],["Total received round-wide",p.totalOpt+p.yld*p.totalOpt*p.dConv,null,true]]]],
-    ["If the company fails","fail",["Fund POV",[["Cash at close",p.safeK],["Redeemed after "+p.dRed+" years (received by the fund)",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["This fund's yield contribution, "+p.dRed+"y",p.yld*p.optK*p.dRed],["Total capital received",p.safeK+p.optK*keepConv+p.yld*p.optK*p.dRed,null,true]]]],
-    ["If the company fails","fail",["Company POV",[["Round valuation (post-money)",p.roundVal],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Redeemed round-wide (received by all investors)",p.totalOpt*p.redRate],["Yield earned round-wide, "+p.dRed+"y",p.yld*p.totalOpt*p.dRed],["Total kept by the company round-wide",p.totalOpt*keepConv+p.yld*p.totalOpt*p.dRed,null,true]]]]];
+    ["If the company succeeds","succeed",["Company POV",[["Round valuation (post-money)",p.roundVal],["Dilution from the convertible pool, round-wide",dil(p.totalOpt),"pct"],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Implied number of investors like this fund",p.optK?p.totalOpt/p.optK:0,"n"],["Yield earned round-wide, "+p.dConv+"y",p.yld*p.totalOpt*p.dConv],["Total received round-wide",p.totalOpt+p.yld*p.totalOpt*p.dConv,null,true]]]],
+    ["If the company fails","fail",["Fund POV",[["Cash at close",p.safeK],["Dilution at this round's valuation",dil(p.safeK+p.optK),"pct"],["Redeemed after "+p.dRed+" years (received by the fund)",p.optK*p.redRate],["Kept by the company",p.optK*keepConv],["This fund's yield contribution, "+p.dRed+"y",p.yld*p.optK*p.dRed],["Total capital received",p.safeK+p.optK*keepConv+p.yld*p.optK*p.dRed,null,true]]]],
+    ["If the company fails","fail",["Company POV",[["Round valuation (post-money)",p.roundVal],["Dilution from the convertible pool, round-wide",dil(p.totalOpt),"pct"],["This fund's share of the convertible pool",p.totalOpt?p.optK/p.totalOpt:0,"pct"],["Redeemed round-wide (received by all investors)",p.totalOpt*p.redRate],["Yield earned round-wide, "+p.dRed+"y",p.yld*p.totalOpt*p.dRed],["Total kept by the company round-wide",p.totalOpt*keepConv+p.yld*p.totalOpt*p.dRed,null,true]]]]];
   $("founder").innerHTML=cards.map(([t,kind,[badge,rows]])=>{
     const hero=rows.find(r=>r[3]), rest=rows.filter(r=>!r[3]);
     return `<div class="founder founder-${kind}">
