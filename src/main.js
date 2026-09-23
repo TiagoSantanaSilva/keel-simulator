@@ -241,12 +241,6 @@ function renderChart(r){
   const money=chartKey==="cnet", pctv=chartKey==="irrToDate";
   const yfmt=(v,full)=>money?(full?fmt.usdFull(v):fmt.usd(v)):pctv?(v*100).toFixed(1)+"%":v.toFixed(2)+"x";
   lineChart("chart",["T","K"].map(k=>({n:NAME[k],c:COL[k],v:r[k][chartKey]})),yfmt,money||pctv?0:1);
-  const markNote=`Surviving positions are marked at cost until the follow-on round in Year ${S.foYear+1}, then marked up ${fmt.x(S.foStepUp)} until they exit. Failed positions stay at cost through Year ${S.failYearStart}, then write down gradually to zero by Year ${S.failYear} — a ramp, not a cliff. Only this chart is affected; DPI and IRR use realised cash only.`;
-  const notes={
-    irrToDate:"IRR to date is mathematically undefined in Year 1 (shown as –), before any capital has moved.",
-    tvpi:markNote, rvpi:markNote, moic:markNote,
-  };
-  $("chartnote").textContent=notes[chartKey]||"";
 }
 function renderHist(mc){
   const small=window.matchMedia("(max-width:560px)").matches;
@@ -310,7 +304,6 @@ function warnings(){
   const minExit=S.outcomes.length?Math.min(...S.outcomes.map(o=>o.exit)):Infinity;
   if(S.outcomes.length&&S.foYear>=minExit) w.push("Follow-ons must be deployed before the earliest outcome's exit year.");
   if(S.outcomes.length&&S.dRed>=minExit) w.push("Redemptions must happen before the earliest outcome's exit year, so recycled capital has time to be deployed.");
-  if(S.failYearStart>S.failYear) w.push("Failures must start being written down before they're fully written off.");
   $("warn").textContent=w.join(" ");
   return w.length===0;
 }

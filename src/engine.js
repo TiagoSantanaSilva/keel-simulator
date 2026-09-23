@@ -45,13 +45,14 @@ const foMult=(p,o)=>o.mult/p.foStepUp;
 const markFactor=(p,t)=>t>=p.foYear?p.foStepUp:1;
 // A failed position doesn't drop to zero the instant the model resolves its outcome -- real
 // funds take time to recognise a failure. Held at full cost through `failYearStart`, then
-// marked down linearly to zero by `failYear` (a ramp, not a cliff); fully written off from
-// `failYear` on.
+// marked down linearly to zero over a fixed FAIL_RAMP_YEARS-year window (a ramp, not a
+// cliff); fully written off from `failYearStart + FAIL_RAMP_YEARS` on.
+export const FAIL_RAMP_YEARS=3;
 const failFrac=(p,t)=>{
+  const end=p.failYearStart+FAIL_RAMP_YEARS;
   if(t<p.failYearStart) return 1;
-  if(t>=p.failYear) return 0;
-  const span=Math.max(1,p.failYear-p.failYearStart);
-  return Math.max(0,Math.min(1,(p.failYear-t)/span));
+  if(t>=end) return 0;
+  return Math.max(0,Math.min(1,(end-t)/FAIL_RAMP_YEARS));
 };
 
 export function irr(cf){

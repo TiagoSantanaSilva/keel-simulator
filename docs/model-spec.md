@@ -118,11 +118,11 @@ chart, using the simplest defensible convention given the workbook has no interi
   the chart is supposed to be telling a marks-vs-cash story.
 - A position destined to fail is held at cost (`checkT` for SAFE only; `safeK` plus any
   unredeemed `optK` for SAFE + Keel) through `failYearStart` (default 2), then marked down
-  *linearly* to zero by `failYear` (default 5) — a ramp (`failFrac`), not a single-year cliff,
-  matching how a real portfolio recognises losses gradually rather than all at once. A redeemed
-  failure is a separate case: its `optK` is held at cost until the redemption year (`dRed`,
-  independent of `failYearStart`/`failYear`), since that capital is genuinely recovered as
-  cash then.
+  *linearly* to zero over a fixed `FAIL_RAMP_YEARS`-year window (3 years, not user-editable)
+  — a ramp (`failFrac`), not a single-year cliff, matching how a real portfolio recognises
+  losses gradually rather than all at once. A redeemed failure is a separate case: its `optK`
+  is held at cost until the redemption year (`dRed`, independent of `failYearStart`), since
+  that capital is genuinely recovered as cash then.
 - The follow-on reserve and recycled capital are held at cost (the dollar amount allocated to
   each bucket, before the `foStepUp` multiple is applied) from their deployment year to their
   exit year.

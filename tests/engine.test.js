@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEF } from "../src/config.js";
-import { run, monte, irr, YR } from "../src/engine.js";
+import { run, monte, irr, YR, FAIL_RAMP_YEARS } from "../src/engine.js";
 
 // Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for four deliberate
 // deviations from the workbook:
@@ -38,10 +38,10 @@ import { run, monte, irr, YR } from "../src/engine.js";
 //    any number below -- both only touch nav[], never paid[]/dist[], so DPI/IRR/TVPI-final
 //    are untouched. First, a surviving position is marked up to `foStepUp` from `foYear`
 //    instead of sitting flat at cost until exit (real follow-on rounds reprice existing
-//    investors too, not just new money). Second, `failYear` became a window
-//    (`failYearStart` to `failYear`, default 2 to 5): failed positions write down linearly
-//    across it instead of cliff-dropping to zero in one year, since real portfolios bleed
-//    out losses over time rather than recognising them all at once.
+//    investors too, not just new money). Second, a failed position now writes down linearly
+//    to zero over a fixed `FAIL_RAMP_YEARS`-year window starting at `failYearStart` (default
+//    2), instead of cliff-dropping to zero in one year, since real portfolios bleed out
+//    losses over time rather than recognising them all at once.
 // If a change moves these numbers on purpose, update them here and say why in the commit.
 describe("deterministic engine, default inputs", () => {
   const r = run(DEF);
@@ -177,23 +177,24 @@ describe("NAV marks", () => {
     expect(r.T.nav[2]).toBeCloseTo(cost * 3, 0); // year 3 (t=2=foYear): marked up
   });
 
-  it("smooths the failure write-off into a ramp between failYearStart and failYear, not a cliff", () => {
-    const p = { ...DEF, sh0: 1, outcomes: [], failYearStart: 2, failYear: 5 };
+  it("smooths the failure write-off into a ramp starting at failYearStart, not a cliff", () => {
+    const p = { ...DEF, sh0: 1, outcomes: [], failYearStart: 2 };
     const r = run(p);
+    const end = p.failYearStart + FAIL_RAMP_YEARS;
     const cost = r.d.failedT * p.checkT;
     expect(r.T.nav[0]).toBeCloseTo(cost, 0); // held at full cost before failYearStart
     expect(r.T.nav[1]).toBeCloseTo(cost, 0);
     expect(r.T.nav[2]).toBeGreaterThan(r.T.nav[3]); // strictly decreasing through the ramp
     expect(r.T.nav[3]).toBeGreaterThan(r.T.nav[4]);
-    expect(r.T.nav[4]).toBeGreaterThan(0);
-    expect(r.T.nav[5]).toBeCloseTo(0, 0); // fully written off from failYear on
+    expect(r.T.nav[end - 1]).toBeGreaterThan(0);
+    expect(r.T.nav[end]).toBeCloseTo(0, 0); // fully written off from failYearStart + FAIL_RAMP_YEARS on
   });
 
-  it("the write-off ramp's timing never changes realised cash flows: DPI and net IRR are identical regardless of failYearStart/failYear", () => {
-    // failYearStart/failYear only appear in the NAV lines (failFrac); paid[]/dist[] -- and
-    // so DPI/IRR -- must be bit-for-bit independent of them.
-    const a = run({ ...DEF, failYearStart: 2, failYear: 5 });
-    const b = run({ ...DEF, failYearStart: 0, failYear: 1 });
+  it("the write-off ramp's timing never changes realised cash flows: DPI and net IRR are identical regardless of failYearStart", () => {
+    // failYearStart only appears in the NAV lines (failFrac); paid[]/dist[] -- and so
+    // DPI/IRR -- must be bit-for-bit independent of it.
+    const a = run({ ...DEF, failYearStart: 2 });
+    const b = run({ ...DEF, failYearStart: 0 });
     expect(a.T.dpi).toEqual(b.T.dpi);
     expect(a.T.irr).toBeCloseTo(b.T.irr, 9);
     expect(a.K.dpi).toEqual(b.K.dpi);

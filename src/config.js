@@ -18,8 +18,7 @@ export const G = [
   ["MF","Management fee (annual)",0,.05,.0025,"pct"],
   ["carry","Carried interest",0,.3,.05,"pct"]]},
  {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[
-  ["failYearStart","Failures start being written down (years after initial check)",0,6,1,"yr","Before this year, a failed position is still held at cost in the unrealised-value (NAV) chart, even though the model already knows it will fail — it just hasn't been marked down on paper yet."],
-  ["failYear","Failures fully written off by (years after initial check)",0,8,1,"yr","The markdown is spread evenly between the two years above and here, instead of dropping to zero in one step — a real portfolio bleeds out its losses over time. Only affects the RVPI/TVPI-over-time chart, never DPI or IRR."]]},
+  ["failYearStart","Failures start being written down (years after initial check)",0,6,1,"yr","Before this year, a failed position is still held at cost in the unrealised-value (NAV) chart, even though the model already knows it will fail. From here the markdown spreads gradually to zero over a few years, instead of dropping in one step. Only affects the RVPI/TVPI-over-time chart, never DPI or IRR."]]},
  {id:"fo",section:"shared",title:"Follow-on reserve (same for both strategies)",f:[
   ["reserve","Follow-on reserve (% of investable capital)",0,.5,.01,"pct"],
   ["foYear","Follow-ons deployed (years after initial check)",0,6,1,"yr","Each company's follow-on tranche exits in that company's own exit year, at that company's own outcome multiple, discounted by the step-up below — see the Outcomes table."],
@@ -49,7 +48,7 @@ export const G = [
 export const DEF = {F:50e6,MFY:10,MF:.02,carry:.2,
   checkT:500e3,safeK:0,optK:500e3,premium:0,roundVal:10e6,totalOpt:1e6,
   reserve:.2,foYear:2,foStepUp:3,foSkill:0,
-  failLabel:"Failure",sh0:.7,failYearStart:2,failYear:5,
+  failLabel:"Failure",sh0:.7,failYearStart:2,
   outcomes:[
     {label:"Solid outcome",share:.2,mult:3,exit:6},
     {label:"Strong outcome",share:.08,mult:10,exit:7},

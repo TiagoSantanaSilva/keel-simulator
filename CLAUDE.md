@@ -26,7 +26,7 @@ See `docs/model-spec.md` for detail. Mirrors `Keel_Fund_Model.xlsx` (Inputs + Fu
 - Keel fee is one flat annual rate (`keelFee`) on the protected balance (`optK`) — a deliberate simplification of the workbook's tiered licence + banded annual fee, requested for a legible pricing control. See docs/model-spec.md for what that changes.
 - Redeemed capital is split between recycling into winners' next round (uncapped) and a direct LP distribution; the rest is written off along with unredeemed failures' `optK`.
 - Follow-on and recycled capital earn each outcome bucket's own multiple divided by `foStepUp` (a step-up discount for entering later than the initial check), allocated across buckets by `allocate()` in engine.js — a blend of an even split and a hindsight/winner-weighted split, controlled by `foSkill` (0–1).
-- NAV marks (RVPI/TVPI-over-time chart only; never DPI or IRR): a surviving position marks up to `foStepUp`× cost from `foYear` (`markFactor` in engine.js) instead of sitting flat at cost until exit. A failing position writes down linearly from full cost to zero across `failYearStart`→`failYear` (`failFrac`), not a single-year cliff.
+- NAV marks (RVPI/TVPI-over-time chart only; never DPI or IRR): a surviving position marks up to `foStepUp`× cost from `foYear` (`markFactor` in engine.js) instead of sitting flat at cost until exit. A failing position writes down linearly from full cost to zero across a fixed `FAIL_RAMP_YEARS`-year window starting at `failYearStart` (`failFrac`), not a single-year cliff.
 - Waterfall: European, no hurdle.
 - No dilution/ownership/valuation-cap mechanics — outcomes pay a flat multiple on the check, matching the workbook. `roundVal` and `totalOpt` are informational only (founder view), not engine inputs.
 
