@@ -64,23 +64,34 @@ import { run, monte, irr, YR, FAIL_RAMP_YEARS, outcomeMultiples } from "../src/e
 //    free lunch; now the other 70% can eat some of it too, so TVPI/IRR both drop from
 //    item 6's levels and (crucially) `reserve` no longer makes returns monotonically better
 //    the higher it goes -- see "model invariants" for a test on exactly that.
+// 10. There's no single shared follow-on step-up any more. Each outcome bucket carries its
+//     own `foPct`: the follow-on round's post-money valuation as a fraction of *that
+//     bucket's own* exitVal, not one $ figure applied uniformly regardless of which company
+//     the money lands in. A follow-on dollar's return simplifies to 1/foPct at exit,
+//     independent of the bucket's own multiple (see engine.js's foStepUp/foMult). DEF sets
+//     foPct=30% on every bucket, i.e. every bucket's follow-on tranche now returns 1/0.3 ≈
+//     3.33x -- whereas item 9's flat foStepUp=3 gave each bucket mult/3 instead (1x/3.33x/
+//     16.67x for the 3x/10x/50x buckets). Net effect at DEF's outcome mix: the Outlier
+//     bucket's follow-on tranche is worth much less (16.67x -> 3.33x) but the Solid bucket's
+//     is worth more (1x -> 3.33x); the latter has more share, so TVPI/IRR both tick up
+//     slightly versus item 9.
 // If a change moves these numbers on purpose, update them here and say why in the commit.
 describe("deterministic engine, default inputs", () => {
   const r = run(DEF);
 
   it("matches the expected net TVPI", () => {
-    expect(r.T.TVPI).toBeCloseTo(1.5312, 3);
-    expect(r.K.TVPI).toBeCloseTo(1.998144, 3);
+    expect(r.T.TVPI).toBeCloseTo(1.5568, 3);
+    expect(r.K.TVPI).toBeCloseTo(2.10688, 3);
   });
 
   it("matches the expected net IRR", () => {
-    expect(r.T.irr).toBeCloseTo(0.0735052041, 3);
-    expect(r.K.irr).toBeCloseTo(0.1291534657, 3);
+    expect(r.T.irr).toBeCloseTo(0.0774082700, 3);
+    expect(r.K.irr).toBeCloseTo(0.1446996666, 3);
   });
 
   it("matches the expected gross multiple", () => {
-    expect(r.grossMultipleT).toBeCloseTo(1.664, 2);
-    expect(r.grossMultipleK).toBeCloseTo(2.2477, 2);
+    expect(r.grossMultipleT).toBeCloseTo(1.696, 2);
+    expect(r.grossMultipleK).toBeCloseTo(2.3836, 2);
   });
 
   it("matches the expected DPI at year 4 and year 6", () => {
@@ -173,23 +184,26 @@ describe("model invariants", () => {
     expect(r.feesK).toBeCloseTo(r.d.totalFees, -1);
   });
 
-  it("a follow-on dollar returns less than a seed dollar in the same company, at any step-up above 1", () => {
+  it("a follow-on dollar returns less than a seed dollar in the same company, at any follow-on valuation above the entry price", () => {
     // Isolate a single outcome bucket (no failures, no other buckets) so both the initial
     // check and the follow-on tranche are riding the exact same company's exit -- the only
     // difference is the entry price. Per dollar deployed, the seed check earns the bucket's
-    // raw multiple; the follow-on tranche earns multiple/foStepUp. sh0:0 means there's no
-    // failure bucket to dilute the reserve with (item 9), so eligibleAtFoYear==survivorShare
-    // here regardless of foYear -- this test is purely about the step-up discount.
-    const p = { ...DEF, sh0: 0, outcomes: [{ label: "Only", share: 1, exitVal: 5 * DEF.roundVal, exit: 6 }], foVal: 3 * DEF.roundVal };
+    // raw multiple (5x); the follow-on tranche, priced at foPct=60% of the exit value, earns
+    // 1/0.6 ~= 1.67x. sh0:0 means there's no failure bucket to dilute the reserve with (item
+    // 9), so eligibleAtFoYear==survivorShare here regardless of foYear -- this test is purely
+    // about the step-up discount.
+    const p = { ...DEF, sh0: 0, outcomes: [{ label: "Only", share: 1, exitVal: 5 * DEF.roundVal, foPct: 0.6, exit: 6 }] };
     const r = run(p);
     const seedReturnPerDollar = r.d.successT / (r.d.NT * p.checkT);
     const followOnReturnPerDollar = r.d.followOnValueT / r.d.foReserve;
     expect(followOnReturnPerDollar).toBeLessThan(seedReturnPerDollar);
   });
 
-  it("net TVPI falls as the follow-on step-up rises", () => {
-    const low = run({ ...DEF, foVal: 1.5 * DEF.roundVal });
-    const high = run({ ...DEF, foVal: 6 * DEF.roundVal });
+  it("net TVPI falls as the follow-on valuation (% of exit value) rises", () => {
+    // A follow-on dollar returns 1/foPct at exit, so a higher foPct (pricier follow-on
+    // round, closer to the eventual exit) means a smaller return -- lower TVPI.
+    const low = run({ ...DEF, outcomes: DEF.outcomes.map(o => ({ ...o, foPct: 0.1 })) });
+    const high = run({ ...DEF, outcomes: DEF.outcomes.map(o => ({ ...o, foPct: 0.8 })) });
     expect(high.T.TVPI).toBeLessThan(low.T.TVPI);
     expect(high.K.TVPI).toBeLessThan(low.K.TVPI);
   });
@@ -236,7 +250,8 @@ describe("model invariants", () => {
 
 describe("NAV marks", () => {
   it("marks a surviving position up to the follow-on step-up from foYear, instead of holding flat at cost", () => {
-    const p = { ...DEF, sh0: 0, reserve: 0, outcomes: [{ label: "Only", share: 1, exitVal: 5 * DEF.roundVal, exit: 6 }], foYear: 2, foVal: 3 * DEF.roundVal };
+    // mult=5, foPct=0.6 -> this bucket's own foStepUp = mult*foPct = 3.
+    const p = { ...DEF, sh0: 0, reserve: 0, outcomes: [{ label: "Only", share: 1, exitVal: 5 * DEF.roundVal, foPct: 0.6, exit: 6 }], foYear: 2 };
     const r = run(p);
     const cost = r.d.NT * p.checkT;
     expect(r.T.nav[1]).toBeCloseTo(cost, 0); // year 2 (t=1), still before foYear: at cost
@@ -301,13 +316,14 @@ describe("Monte Carlo", () => {
 
 
 describe("outcome buckets", () => {
-  it("is a plain array of {label, share, exitVal, exit}, and the shares (plus failure) sum to 100%", () => {
+  it("is a plain array of {label, share, exitVal, foPct, exit}, and the shares (plus failure) sum to 100%", () => {
     expect(Array.isArray(DEF.outcomes)).toBe(true);
     expect(DEF.outcomes.length).toBeGreaterThan(0);
     DEF.outcomes.forEach(o => {
       expect(typeof o.label).toBe("string");
       expect(typeof o.share).toBe("number");
       expect(typeof o.exitVal).toBe("number");
+      expect(typeof o.foPct).toBe("number");
       expect(typeof o.exit).toBe("number");
     });
     const sum = DEF.sh0 + DEF.outcomes.reduce((a, o) => a + o.share, 0);
@@ -315,7 +331,7 @@ describe("outcome buckets", () => {
   });
 
   it("supports adding and removing rows freely", () => {
-    const extra = { ...DEF, outcomes: [...DEF.outcomes, { label: "Mega outlier", share: 0, exitVal: 500 * DEF.roundVal, exit: 9 }] };
+    const extra = { ...DEF, outcomes: [...DEF.outcomes, { label: "Mega outlier", share: 0, exitVal: 500 * DEF.roundVal, foPct: 0.3, exit: 9 }] };
     expect(() => run(extra)).not.toThrow();
     const fewer = { ...DEF, sh0: DEF.sh0 + DEF.outcomes[DEF.outcomes.length - 1].share, outcomes: DEF.outcomes.slice(0, -1) };
     expect(() => run(fewer)).not.toThrow();

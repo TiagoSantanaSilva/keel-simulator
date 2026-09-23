@@ -17,17 +17,14 @@ export const YR = [1,2,3,4,5,6,7,8,9,10,11,12];
 export function outcomeMultiples(p){
   return p.outcomes.map(o=>p.roundVal?o.exitVal/p.roundVal:0);
 }
-// Replaces each outcome's exitVal with a derived `mult` (exitVal / entry valuation) and
-// turns the follow-on valuation into a derived `foStepUp`, so the rest of the engine can
-// keep working in multiples exactly as before. The entry valuation is `roundVal` -- the
-// price the initial check bought in at. Keel's convertible enters at `premium` above that,
-// which is applied later wherever a K exit is computed (`/(1+p.premium)`), not here, so this
-// one multiple serves both strategies.
+// Replaces each outcome's exitVal with a derived `mult` (exitVal / entry valuation), so the
+// rest of the engine can keep working in multiples exactly as before. The entry valuation is
+// `roundVal` -- the price the initial check bought in at. Keel's convertible enters at
+// `premium` above that, which is applied later wherever a K exit is computed
+// (`/(1+p.premium)`), not here, so this one multiple serves both strategies.
 function withMult(p){
   const mults=outcomeMultiples(p);
-  return {...p,
-    outcomes:p.outcomes.map((o,i)=>({...o,mult:mults[i]})),
-    foStepUp:p.roundVal?p.foVal/p.roundVal:1};
+  return {...p, outcomes:p.outcomes.map((o,i)=>({...o,mult:mults[i]}))};
 }
 const successMix=p=>p.outcomes.reduce((a,o)=>a+o.share*o.mult,0);
 // Total share of positions that don't fail -- i.e. the ones a fund could plausibly
@@ -52,17 +49,23 @@ function allocate(p,eligibleShare,valueMix,pool){
     return pool*((1-p.foSkill)*even+p.foSkill*hindsight);
   });
 }
-// A follow-on/recycled dollar buys in at a higher price than the initial check (the
-// step-up), so it only captures a fraction of the same exit multiple.
-const foMult=(p,o)=>o.mult/p.foStepUp;
+// Each outcome bucket's own follow-on step-up: the follow-on round is priced at `foPct` of
+// *that company's* eventual exit value, so its post-money valuation is `mult * foPct` times
+// the initial round's valuation (mult*roundVal = exitVal, times foPct).
+const foStepUp=(p,o)=>o.mult*o.foPct;
+// A follow-on/recycled dollar buys in at that step-up, so it only captures mult/foStepUp of
+// the same exit -- which simplifies to 1/foPct, independent of the bucket's own multiple: a
+// follow-on round priced at 50% of the eventual exit value simply doubles by exit, whether
+// that exit is a modest one or an outlier.
+const foMult=(p,o)=>o.foPct>0?o.mult/foStepUp(p,o):0;
 
 // NAV marks (RVPI/TVPI-over-time chart only -- never DPI or IRR, which come from the cash
 // rows below). A surviving position is held at cost until the follow-on round at `foYear`,
-// then marked up to the same step-up used for actual follow-on dollars: the round that
-// prices new money in at a premium also reprices the company's *existing* investors, so an
-// initial check is worth `foStepUp`x its cost from that point until it exits and realises
+// then marked up to that bucket's own step-up used for actual follow-on dollars: the round
+// that prices new money in at a premium also reprices the company's *existing* investors, so
+// an initial check is worth `foStepUp`x its cost from that point until it exits and realises
 // the full outcome multiple.
-const markFactor=(p,t)=>t>=p.foYear?p.foStepUp:1;
+const markFactor=(p,o,t)=>t>=p.foYear?foStepUp(p,o):1;
 // A failed position doesn't drop to zero the instant the model resolves its outcome -- real
 // funds take time to recognise a failure. Held at full cost through `failYearStart`, then
 // marked down linearly to zero over a fixed FAIL_RAMP_YEARS-year window (a ramp, not a
@@ -211,7 +214,7 @@ export function run(p){
 
     let n=0;
     p.outcomes.forEach((o,i)=>{
-      if(t<o.exit) n+=d.NT*p.checkT*o.share*markFactor(p,t);
+      if(t<o.exit) n+=d.NT*p.checkT*o.share*markFactor(p,o,t);
       if(t>=p.foYear&&t<o.exit) n+=d.foAllocT[i];
     });
     n+=d.failedT*p.checkT*failFrac(p,t);
@@ -231,7 +234,7 @@ export function run(p){
 
     n=0;
     p.outcomes.forEach((o,i)=>{
-      if(t<o.exit) n+=d.NK*d.checkK*o.share*markFactor(p,t);
+      if(t<o.exit) n+=d.NK*d.checkK*o.share*markFactor(p,o,t);
       if(t>=p.foYear&&t<o.exit) n+=d.foAllocK[i];
       if(t>=p.dRed&&t<o.exit) n+=d.recAllocK[i];
     });

@@ -5,15 +5,17 @@ across the portfolio, so position counts can be fractional. The Monte Carlo sect
 exception: it draws whole positions at random.
 
 Two strategies are compared, both funded from the same fund and the same outcome distribution.
-The failure bucket is fixed (`sh0`, `failLabel` — no exit value or exit year, since it never
-returns anything); every other outcome lives in `outcomes`, a freely editable array of
-`{label, share, exitVal, exit}`. Rows can be added, removed or renamed — the engine iterates the
-array, so its length isn't fixed anywhere. `exitVal` is the company's absolute value at exit;
-each bucket's *multiple* is never stored, it's derived as `exitVal / roundVal` (`outcomeMultiples`
-in engine.js) and used everywhere internally exactly like the old raw multiple was — see
-`withMult`. `roundVal` (entry valuation, post-money) is therefore **not informational any more**:
-it's the denominator of every outcome's multiple, so changing it moves returns on purpose. It's
-also still shown in the founder view for dilution context.
+The failure bucket is fixed (`sh0`, `failLabel` — no exit value, follow-on valuation or exit
+year, since it never returns anything); every other outcome lives in `outcomes`, a freely
+editable array of `{label, share, exitVal, foPct, exit}`. Rows can be added, removed or renamed
+— the engine iterates the array, so its length isn't fixed anywhere. `exitVal` is the company's
+absolute value at exit; each bucket's *multiple* is never stored, it's derived as
+`exitVal / roundVal` (`outcomeMultiples` in engine.js) and used everywhere internally exactly
+like the old raw multiple was — see `withMult`. `roundVal` (entry valuation, post-money) is
+therefore **not informational any more**: it's the denominator of every outcome's multiple, so
+changing it moves returns on purpose. It's also still shown in the founder view for dilution
+context. `foPct` is that same bucket's follow-on round valuation, as a fraction of its own
+`exitVal` — see the Timeline section below.
 
 - **SAFE only:** every position is a single unprotected SAFE (`checkT`), independent of the
   SAFE + Keel check size below. Each outcome's multiple for T is `exitVal / roundVal`.
@@ -57,13 +59,20 @@ it's deployed (`dRed`), a redeemed failure has already been recognised as dead, 
 `allocate()` returns zero for every bucket; the undistributed amount is paid straight to LPs
 (`distFromRed`) instead of silently vanishing.
 
-Each bucket's follow-on tranche earns *that bucket's own* `mult`, divided by `foStepUp`, and
-pays out in *that bucket's own* `exit` year. The division models a real dynamic a flat multiple
-couldn't: a follow-on dollar buys in at a higher price than the initial check (the step-up), so
-it only captures a fraction of the same exit. `foStepUp` isn't its own input either — it's
-derived the same way as an outcome's multiple, as `foVal / roundVal` (`foVal` is the follow-on
-round's post-money valuation). There's no separate follow-on exit-year input — the money simply
-rides along with whichever company it went into, using the Outcomes table that's already there.
+Each bucket's follow-on tranche earns *that bucket's own* `mult`, divided by *that bucket's own*
+`foStepUp = mult × foPct`, and pays out in *that bucket's own* `exit` year. There's no single
+follow-on valuation shared across every company — each bucket sets its own follow-on round's
+post-money valuation as `foPct` of *that company's own* eventual exit value (`exitVal × foPct`),
+so `mult × foPct` is that valuation divided by `roundVal`, matching how every other multiple in
+this model is derived. The division models a real dynamic a flat multiple couldn't: a follow-on
+dollar buys in at a higher price than the initial check (the step-up), so it only captures a
+fraction of the same exit. The fraction it captures, `mult / foStepUp`, simplifies to `1/foPct`
+— independent of the bucket's own multiple, since `mult` cancels out. In other words: a
+follow-on round priced at 50% of the eventual exit value returns 2x by exit, whether that exit
+is a modest one or an outlier; a bigger `foPct` means the follow-on money bought in closer to
+the top, so it captures less of the remaining upside. There's no separate follow-on exit-year
+input — the money simply rides along with whichever company it went into, using the Outcomes
+table that's already there.
 
 - **Year 1:** initial checks. Management fees are charged for `MFY` years starting here.
 - **Years 1 to `dConv`:** Keel charges its annual fee on positions still protected and
@@ -76,7 +85,7 @@ rides along with whichever company it went into, using the Outcomes table that's
   This reserve is sized identically for both strategies (see Strategies below) — it's the
   most common source of "why did the SAFE-only number move?" confusion.
 - Each outcome bucket exits, at its own `exit`+1 year, paying out its multiple on the initial
-  check plus `mult ÷ foStepUp` on whatever follow-on/recycled dollars were allocated to it.
+  check plus `1 ÷ foPct` on whatever follow-on/recycled dollars were allocated to it.
 
 ## Derived values (`derive`)
 
@@ -111,7 +120,7 @@ it keeps accruing the Keel fee until the conversion decision at year `dConv`.
 ## Strategies
 
 - **SAFE only:** NT checks of `checkT`. Failures return nothing. The follow-on reserve is
-  allocated per bucket and exits at each bucket's own `mult ÷ foStepUp`.
+  allocated per bucket and exits at each bucket's own `1 ÷ foPct`.
 - **SAFE + Keel:** NK checks split `safeK` / `optK`. A failure loses `safeK` outright; the
   `optK` share is redeemed (`redRate`) or lost. A success converts the *whole* check
   (`safeK` + `optK`) at the round's terms, discounted by `premium`. Capital recovered from
@@ -141,11 +150,11 @@ The workbook itself tracks only realised cash (DPI over time; TVPI is the final 
 everything has exited). This app additionally marks unrealised positions for the RVPI/TVPI
 chart, using the simplest defensible convention given the workbook has no interim marks:
 
-- A position destined to succeed is held at cost from year 1, marked up to `foStepUp`× cost
-  from `foYear` (`markFactor`), then realised at its full outcome multiple at its exit year
-  (removed from NAV, added to distributions). The markup models the fact that a follow-on
-  round reprices *existing* investors, not just the new money going in — before this, a
-  surviving position sat flat at cost for years, understating RVPI/TVPI in exactly the years
+- A position destined to succeed is held at cost from year 1, marked up to that bucket's own
+  `foStepUp`× cost from `foYear` (`markFactor`), then realised at its full outcome multiple at
+  its exit year (removed from NAV, added to distributions). The markup models the fact that a
+  follow-on round reprices *existing* investors, not just the new money going in — before this,
+  a surviving position sat flat at cost for years, understating RVPI/TVPI in exactly the years
   the chart is supposed to be telling a marks-vs-cash story.
 - A position destined to fail is held at cost (`checkT` for SAFE only; `safeK` plus any
   unredeemed `optK` for SAFE + Keel) through `failYearStart` (fixed at 2, not a user input),
@@ -155,8 +164,8 @@ chart, using the simplest defensible convention given the workbook has no interi
   separate case: its `optK` is held at cost until the redemption year (`dRed`, independent of
   `failYearStart`), since that capital is genuinely recovered as cash then.
 - The follow-on reserve and recycled capital are held at cost (the dollar amount allocated to
-  each bucket, before the `foStepUp` multiple is applied) from their deployment year to their
-  exit year.
+  each bucket, before that bucket's own `1 ÷ foPct` multiple is applied) from their deployment
+  year to their exit year.
 
 This choice only feeds the RVPI/TVPI-over-time chart. It never affects DPI or IRR, which come
 purely from the cash-flow rows below, matching the workbook exactly.

@@ -6,12 +6,15 @@
 // colour-coded header whenever the section changes.
 //
 // The "out" (Outcomes) group is rendered as an editable table (see main.js) instead of
-// sliders: one fixed Failure row (DEF.failLabel/sh0 -- no exit value or exit year, since it
-// never returns anything) plus a user-editable, freely add/removable list of outcome
-// buckets in DEF.outcomes ({label, share, exitVal, exit}). There's no fixed set of fields
-// for the success buckets -- the array can be any length, which is what lets the table grow
-// or shrink. Each bucket's multiple isn't stored or shown -- it's derived in engine.js as
-// exitVal / roundVal (see outcomeMultiples/withMult) and used internally only.
+// sliders: one fixed Failure row (DEF.failLabel/sh0 -- no exit value, follow-on valuation or
+// exit year, since it never returns anything) plus a user-editable, freely add/removable
+// list of outcome buckets in DEF.outcomes ({label, share, exitVal, foPct, exit}). There's no
+// fixed set of fields for the success buckets -- the array can be any length, which is what
+// lets the table grow or shrink. Each bucket's multiple isn't stored or shown -- it's
+// derived in engine.js as exitVal / roundVal (see outcomeMultiples/withMult) and used
+// internally only. `foPct` is that same bucket's follow-on round valuation, as a fraction of
+// its own exitVal (see engine.js's foStepUp/foMult) -- every company gets its own follow-on
+// pricing instead of one number shared across every outcome.
 //
 // `roundVal`, despite sitting in the "checks" (K-section) group below for familiarity,
 // isn't K-specific -- it's every outcome's entry valuation for *both* strategies (see its
@@ -27,7 +30,6 @@ export const G = [
  {id:"fo",section:"shared",title:"Follow-on reserve (same for both strategies)",f:[
   ["reserve","Follow-on reserve (% of investable capital)",0,.5,.01,"pct","More reserve means fewer initial checks. Raises variance either way — see Monte Carlo below."],
   ["foYear","Follow-ons deployed (years after initial check)",0,6,1,"yr","When follow-on money goes into surviving companies."],
-  ["foVal","Follow-on valuation (post-money)",1e6,1e9,1e6,"usd","Follow-on money buys in pricier than the initial check, so it earns a smaller multiple: this ÷ the entry valuation above."],
   ["foSkill","Follow-on allocation skill",0,1,.05,"pct","0% spreads it evenly. 100% concentrates it in the eventual winners."]]},
 
  {id:"checkT",section:"T",title:"Check size",open:true,f:[
@@ -52,14 +54,17 @@ export const G = [
 ];
 export const DEF = {F:50e6,MFY:10,MF:.02,carry:.2,
   checkT:500e3,safeK:0,optK:500e3,premium:0,roundVal:10e6,totalOpt:1e6,
-  reserve:.2,foYear:2,foVal:30e6,foSkill:0,
+  reserve:.2,foYear:2,foSkill:0,
   failLabel:"Failure",sh0:.7,failYearStart:2,
   // exitVal = the old flat mult x roundVal (10e6), migrated so the derived multiple
-  // (exitVal/roundVal) matches the previous defaults exactly: 3x, 10x, 50x.
+  // (exitVal/roundVal) matches the previous defaults exactly: 3x, 10x, 50x. foPct=30% for
+  // every bucket means each company's follow-on round is priced at 30% of its own eventual
+  // exit value, so a follow-on dollar returns 1/0.3 ≈ 3.3x by exit -- close to the old flat
+  // foStepUp=3 default, for continuity, though now it varies by company once foPct is tuned.
   outcomes:[
-    {label:"Solid outcome",share:.2,exitVal:30e6,exit:6},
-    {label:"Strong outcome",share:.08,exitVal:100e6,exit:7},
-    {label:"Outlier",share:.02,exitVal:500e6,exit:8},
+    {label:"Solid outcome",share:.2,exitVal:30e6,foPct:.3,exit:6},
+    {label:"Strong outcome",share:.08,exitVal:100e6,foPct:.3,exit:7},
+    {label:"Outlier",share:.02,exitVal:500e6,foPct:.3,exit:8},
   ],
   redRate:.75,dConv:2,dRed:3,
   yld:.04,

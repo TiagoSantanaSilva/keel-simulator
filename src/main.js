@@ -6,11 +6,12 @@ import { YR, run, monte } from "./engine.js";
 
 // Bump whenever the input schema changes shape or meaning, so a stale save from an
 // older version of the model isn't silently merged onto new defaults.
-// Bumped from 3: outcome buckets now store `exitVal` (absolute company value at exit)
-// instead of a raw `mult`, and the follow-on step-up is now derived from `foVal` (a
-// follow-on valuation) instead of being its own input -- a saved `mult`/`foStepUp` from
-// before would otherwise leave the new fields undefined.
-const SCHEMA_VERSION = 4;
+// Bumped from 4: the follow-on step-up is no longer one shared `foVal` -- each outcome
+// bucket now carries its own `foPct` (follow-on valuation as a % of that bucket's own exit
+// value). A saved outcomes array from before would have no `foPct` on any row, which
+// foMult() reads as 0 (no follow-on return at all) -- silently zeroing out follow-on capital
+// instead of erroring, so this has to force a reset rather than merge quietly.
+const SCHEMA_VERSION = 5;
 
 // DEF.outcomes is an array of objects -- a plain Object.assign would copy the reference,
 // not the contents, so editing a row in S would silently mutate the shared default too.
@@ -102,20 +103,21 @@ function buildOutcomesTable(){
   return wrap;
 }
 function renderOutcomesRows(wrap){
-  let h=`<table class="outtbl"><thead><tr><th>Outcome</th><th>Share</th><th>Exit value ($M)</th><th>Exit year</th><th></th></tr></thead><tbody>`;
+  let h=`<table class="outtbl"><thead><tr><th>Outcome</th><th>Share</th><th>Exit value ($M)</th><th>Follow-on val (% of exit)</th><th>Exit year</th><th></th></tr></thead><tbody>`;
   h+=`<tr><td><input type="text" class="cell cell-label" id="in_failLabel" value="${S.failLabel}"></td>
     <td><input type="number" class="cell" id="in_sh0" min="0" max="100" step="1" value="${Math.round(S.sh0*100)}"> %</td>
-    <td class="dim">—</td><td class="dim">—</td><td></td></tr>`;
+    <td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td></td></tr>`;
   S.outcomes.forEach((o,i)=>{
     h+=`<tr>
       <td><input type="text" class="cell cell-label" data-i="${i}" data-f="label" value="${o.label}"></td>
       <td><input type="number" class="cell" data-i="${i}" data-f="share" min="0" max="100" step="1" value="${Math.round(o.share*100)}"> %</td>
       <td><input type="number" class="cell cell-exitval" data-i="${i}" data-f="exitVal" min="0" step="0.5" value="${o.exitVal/1e6}"></td>
+      <td><input type="number" class="cell" data-i="${i}" data-f="foPct" min="1" max="100" step="1" value="${Math.round(o.foPct*100)}"> %</td>
       <td><input type="number" class="cell" data-i="${i}" data-f="exit" min="1" max="11" step="1" value="${o.exit}"></td>
       <td><button type="button" class="rowdel" data-i="${i}" aria-label="Remove ${o.label}">×</button></td>
     </tr>`;
   });
-  h+=`</tbody><tfoot><tr><td>Total</td><td id="outtotal" colspan="4"></td></tr></tfoot></table>
+  h+=`</tbody><tfoot><tr><td>Total</td><td id="outtotal" colspan="5"></td></tr></tfoot></table>
     <button type="button" class="btn ghost outadd" id="outadd">+ Add outcome</button>`;
   wrap.innerHTML=h;
 
@@ -127,6 +129,7 @@ function renderOutcomesRows(wrap){
       if(f==="label") S.outcomes[i].label=inp.value;
       else if(f==="share"){ S.outcomes[i].share=parseFloat(inp.value||0)/100; paintOutcomesTable(); }
       else if(f==="exitVal") S.outcomes[i].exitVal=parseFloat(inp.value||0)*1e6;
+      else if(f==="foPct") S.outcomes[i].foPct=parseFloat(inp.value||0)/100;
       else S.outcomes[i][f]=parseFloat(inp.value||0);
       schedule();
     });
@@ -140,7 +143,7 @@ function renderOutcomesRows(wrap){
   });
   wrap.querySelector("#outadd").addEventListener("click",()=>{
     const lastExit=S.outcomes.length?S.outcomes[S.outcomes.length-1].exit:YR[YR.length-1];
-    S.outcomes.push({label:"New outcome",share:0,exitVal:S.roundVal,exit:lastExit});
+    S.outcomes.push({label:"New outcome",share:0,exitVal:S.roundVal,foPct:.3,exit:lastExit});
     renderOutcomesRows(wrap);
     schedule();
   });
@@ -356,12 +359,12 @@ function buildWorkbook(){
   const inputRows=[["Keel fund simulator export"],[],["INPUTS","Value"]];
   G.forEach(grp=>{
     if(grp.id==="out"){
-      inputRows.push(["Entry valuation (post-money)",S.roundVal]);
       inputRows.push([S.failLabel+": share",S.sh0]);
       S.outcomes.forEach(o=>{
         inputRows.push([o.label+": share",o.share]);
         inputRows.push([o.label+": exit value",o.exitVal]);
         inputRows.push([o.label+": multiple (derived)",S.roundVal?o.exitVal/S.roundVal:0]);
+        inputRows.push([o.label+": follow-on valuation (% of exit)",o.foPct]);
         inputRows.push([o.label+": exit year",o.exit]);
       });
       return;
