@@ -20,10 +20,10 @@ export const G = [
  {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[
   ["failYearStart","Failures start being written down (years after initial check)",0,6,1,"yr","Before this year, a failed position is still held at cost in the unrealised-value (NAV) chart, even though the model already knows it will fail. From here the markdown spreads gradually to zero over a few years, instead of dropping in one step. Only affects the RVPI/TVPI-over-time chart, never DPI or IRR."]]},
  {id:"fo",section:"shared",title:"Follow-on reserve (same for both strategies)",f:[
-  ["reserve","Follow-on reserve (% of investable capital)",0,.5,.01,"pct","Shrinks the initial check pool, so fewer companies get seeded (see \"Seed positions backed\"). Whether that raises or lowers expected IRR depends on whether follow-on money earns more per dollar than the blended initial-check average once the step-up is applied -- it can go either way, and moves the same direction at every level of this slider (no interior optimum). Either way, fewer initial bets means more variance: the downside risk shows up in the Monte Carlo section below, not in this deterministic number."],
-  ["foYear","Follow-ons deployed (years after initial check)",0,6,1,"yr","Each company's follow-on tranche exits in that company's own exit year, at that company's own outcome multiple, discounted by the step-up below — see the Outcomes table."],
-  ["foStepUp","Follow-on step-up (valuation multiple over the initial check)",1,10,.5,"x","Follow-on money buys in at a higher price than the initial check, so it earns a smaller share of the same exit: each follow-on dollar returns the outcome's multiple divided by this step-up, not the full multiple."],
-  ["foSkill","Follow-on allocation skill",0,1,.05,"pct","0% splits the reserve evenly across every surviving company. 100% puts it in the eventual winners with perfect hindsight, weighted by their size. Applies to recycled capital too."]]},
+  ["reserve","Follow-on reserve (% of investable capital)",0,.5,.01,"pct","More reserve means fewer initial checks. Raises variance either way — see Monte Carlo below."],
+  ["foYear","Follow-ons deployed (years after initial check)",0,6,1,"yr","When follow-on money goes into surviving companies."],
+  ["foStepUp","Follow-on step-up (valuation multiple over the initial check)",1,10,.5,"x","Follow-on money buys in pricier, so it earns a smaller multiple than the initial check."],
+  ["foSkill","Follow-on allocation skill",0,1,.05,"pct","0% spreads it evenly. 100% concentrates it in the eventual winners."]]},
 
  {id:"checkT",section:"T",title:"Check size",open:true,f:[
   ["checkT","SAFE only: check size",50e3,3e6,25e3,"usd"]]},
