@@ -202,3 +202,12 @@ averaging it across runs is well-defined. IRR is not: it's a rate computed from 
 cash-flow timing, and the mean of several runs' rates doesn't correspond to any actual
 portfolio's return. `irrMedian` reports the median run's IRR instead, which is well-defined
 regardless (it's just "the middle run," picked by sorting).
+
+## Parameter sweeps (`sweep2D`)
+
+`sweep2D(p, xKey, xVals, yKey, yVals)` runs the deterministic model once per combination of two
+swept inputs, holding everything else at `p`'s values, and returns a `yVals.length` ×
+`xVals.length` grid of `{tvpiT, tvpiK, irrT, irrK}`. It's a thin loop over `run()` — no new
+formulas, just many evaluations of the existing ones — used by the "Where SAFE + Keel wins"
+heatmap (`redRate` × `recShare` by default) to show where the crossover between the two
+strategies sits, rather than only the single point the rest of the page evaluates.

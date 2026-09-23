@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEF } from "../src/config.js";
-import { run, monte, irr, YR, FAIL_RAMP_YEARS, outcomeMultiples } from "../src/engine.js";
+import { run, monte, irr, YR, FAIL_RAMP_YEARS, outcomeMultiples, sweep2D } from "../src/engine.js";
 
 // Baseline values from Keel_Fund_Model.xlsx (Fund Model tab), adapted for four deliberate
 // deviations from the workbook:
@@ -346,5 +346,27 @@ describe("outcome buckets", () => {
       expect(mc.K.mean).toBeCloseTo(det.K.TVPI, 6);
       expect(mc.T.mean).toBeCloseTo(det.T.TVPI, 6);
     });
+  });
+});
+
+describe("sweep2D", () => {
+  it("returns a grid shaped [yVals.length][xVals.length], matching individual run() calls cell by cell", () => {
+    const xVals = [0, 0.5, 1], yVals = [0, 1];
+    const grid = sweep2D(DEF, "redRate", xVals, "recShare", yVals);
+    expect(grid.length).toBe(yVals.length);
+    grid.forEach(row => expect(row.length).toBe(xVals.length));
+    yVals.forEach((y, j) => xVals.forEach((x, i) => {
+      const r = run({ ...DEF, redRate: x, recShare: y });
+      expect(grid[j][i].tvpiT).toBeCloseTo(r.T.TVPI, 9);
+      expect(grid[j][i].tvpiK).toBeCloseTo(r.K.TVPI, 9);
+      expect(grid[j][i].irrT).toBeCloseTo(r.T.irr, 9);
+      expect(grid[j][i].irrK).toBeCloseTo(r.K.irr, 9);
+    }));
+  });
+
+  it("doesn't mutate the base input object", () => {
+    const base = { ...DEF };
+    sweep2D(DEF, "redRate", [0, 1], "recShare", [0, 1]);
+    expect(DEF).toEqual(base);
   });
 });

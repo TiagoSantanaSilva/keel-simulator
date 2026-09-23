@@ -346,3 +346,15 @@ export function monte(p,runs){
   };
   return {T:st(resT,irrT),K:st(resK,irrK),runs,NT,NK};
 }
+
+// ---------------- parameter sweeps ----------------
+// Runs the deterministic model across every combination of two swept inputs (e.g. redRate x
+// recShare), holding everything else at p's current values. Used by the "where does Keel
+// beat SAFE only" heatmap -- returns just the handful of numbers that needs, not the full
+// run() output, since this runs over a whole grid of cells rather than once.
+export function sweep2D(p,xKey,xVals,yKey,yVals){
+  return yVals.map(y=>xVals.map(x=>{
+    const r=run({...p,[xKey]:x,[yKey]:y});
+    return {tvpiT:r.T.TVPI,tvpiK:r.K.TVPI,irrT:r.T.irr,irrK:r.K.irr};
+  }));
+}

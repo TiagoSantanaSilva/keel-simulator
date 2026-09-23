@@ -2,7 +2,7 @@ import "./styles.css";
 import * as XLSX from "xlsx";
 import { G, DEF } from "./config.js";
 import { fmt } from "./format.js";
-import { YR, run, monte, outcomeMultiples, FAIL_RAMP_YEARS } from "./engine.js";
+import { YR, run, monte, outcomeMultiples, FAIL_RAMP_YEARS, sweep2D } from "./engine.js";
 
 // Bump whenever the input schema changes shape or meaning, so a stale save from an
 // older version of the model isn't silently merged onto new defaults.
@@ -305,6 +305,55 @@ function renderBox(mc,hi){
   });
   $("box").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Interquartile range of net TVPI across simulated funds, SAFE only vs SAFE + Keel">${g}</svg>`;
 }
+
+/* ---------------- where does Keel win ---------------- */
+let winMapKey="tvpi";
+const WINMAP_STEPS=15;
+function renderWinMap(){
+  const p=S;
+  tabs("winMapTabs",[["tvpi","Net TVPI"],["irr","Net IRR"]],winMapKey,k=>{winMapKey=k;renderWinMap()});
+  const small=window.matchMedia("(max-width:560px)").matches;
+  const steps=WINMAP_STEPS;
+  const axisVals=Array.from({length:steps},(_,i)=>i/(steps-1));
+  const grid=sweep2D(p,"redRate",axisVals,"recShare",axisVals);
+  const delta=c=>winMapKey==="tvpi"?c.tvpiK-c.tvpiT:c.irrK-c.irrT;
+  // Use the exact current run (already computed this cycle), not the nearest grid cell --
+  // redRate/recShare rarely land exactly on a grid line, so snapping to the closest cell
+  // could report a visibly different delta than what the rest of the page is showing.
+  const curDelta=last?delta({tvpiT:last.T.TVPI,tvpiK:last.K.TVPI,irrT:last.T.irr,irrK:last.K.irr}):0;
+  const maxAbs=Math.max(1e-6,...grid.flat().map(c=>Math.abs(delta(c))));
+  const magFmt=v=>winMapKey==="tvpi"?v.toFixed(2)+"x":(v*100).toFixed(1)+" points";
+
+  const fs=small?24:11;
+  const m={l:small?86:60,r:small?16:14,t:small?16:12,b:small?60:44};
+  const W=760, plotW=W-m.l-m.r, plotH=small?340:300, H=m.t+plotH+m.b;
+  const cellW=plotW/steps, cellH=plotH/steps;
+  const cx=i=>m.l+i*cellW, cy=j=>m.t+(steps-1-j)*cellH; // invert: 0% recycled at the bottom
+
+  let g="";
+  grid.forEach((row,j)=>row.forEach((cell,i)=>{
+    const d=delta(cell), t=Math.min(1,Math.abs(d)/maxAbs), col=d>=0?"var(--pos)":"var(--neg)";
+    g+=`<rect x="${cx(i).toFixed(1)}" y="${cy(j).toFixed(1)}" width="${(cellW+0.6).toFixed(1)}" height="${(cellH+0.6).toFixed(1)}" fill="${col}" fill-opacity="${(0.1+0.8*t).toFixed(2)}"/>`;
+  }));
+  [0,.25,.5,.75,1].forEach(v=>{
+    const px=m.l+v*plotW, py=m.t+(1-v)*plotH;
+    g+=`<text x="${px}" y="${m.t+plotH+22}" text-anchor="middle" style="font-size:${fs}px">${(v*100).toFixed(0)}%</text>`;
+    g+=`<text x="${m.l-10}" y="${py+4}" text-anchor="end" style="font-size:${fs}px">${(v*100).toFixed(0)}%</text>`;
+  });
+  g+=`<text x="${m.l+plotW/2}" y="${H-6}" text-anchor="middle" style="fill:var(--muted);font-size:${fs}px">Redemption rate</text>`;
+  g+=`<text x="${small?18:16}" y="${m.t+plotH/2}" text-anchor="middle" transform="rotate(-90 ${small?18:16} ${m.t+plotH/2})" style="fill:var(--muted);font-size:${fs}px">Share of recovered capital recycled</text>`;
+  // "you are here" marker at the exact current redRate/recShare, not snapped to a cell
+  const mx=m.l+p.redRate*plotW, my=m.t+(1-p.recShare)*plotH;
+  g+=`<circle cx="${mx}" cy="${my}" r="${small?9:7}" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5"/>`;
+  g+=`<circle cx="${mx}" cy="${my}" r="${small?3:2.5}" fill="var(--ink)"/>`;
+
+  $("winmap").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Whether SAFE + Keel or SAFE only wins, by redemption rate and recycled share">${g}</svg>`;
+  $("winmapnote").innerHTML=`At your current settings — <b>${fmt.pct1(p.redRate)}</b> redemption rate,
+    <b>${fmt.pct1(p.recShare)}</b> recycled — <b style="color:${curDelta>=0?"var(--pos)":"var(--neg)"}">
+    SAFE + Keel ${curDelta>=0?"beats":"trails"} SAFE only by ${magFmt(Math.abs(curDelta))}
+    ${winMapKey==="tvpi"?"net TVPI":"net IRR"}</b>. The dot marks that point on the map; darker
+    cells mean a bigger gap either way.`;
+}
 function renderFounder(){
   const p=S, keepConv=1-p.redRate, dil=v=>p.roundVal?v/p.roundVal:0;
   const fmtVal=(v,f)=>f==="pct"?fmt.pct1(v):f==="n"?v.toFixed(1):fmt.usdFull(v);
@@ -581,7 +630,7 @@ function update(){
   if(!warnings()) return;
   last=run(S); renderHull(last); renderStats(last); renderChart(last); renderCF(last); renderFounder();
   if(pageKey==="assumptions") renderAssumptions();
-  clearTimeout(mcTimer); mcTimer=setTimeout(()=>{lastMC=monte(S,2000);renderHist(lastMC);
+  clearTimeout(mcTimer); mcTimer=setTimeout(()=>{lastMC=monte(S,2000);renderHist(lastMC);renderWinMap();
     try{localStorage.setItem("keel-sim-inputs",JSON.stringify({v:SCHEMA_VERSION,s:S}))}catch(e){}},180);
 }
 try{

@@ -29,6 +29,7 @@ See `docs/model-spec.md` for detail. Mirrors `Keel_Fund_Model.xlsx` (Inputs + Fu
 - NAV marks (RVPI/TVPI-over-time chart only; never DPI or IRR): a surviving position marks up to that bucket's own `foStepUp`× cost from `foYear` (`markFactor` in engine.js) instead of sitting flat at cost until exit. A failing position writes down linearly from full cost to zero across a fixed `FAIL_RAMP_YEARS`-year window starting at `failYearStart` (`failFrac`), not a single-year cliff.
 - Waterfall: European, no hurdle.
 - No dilution/ownership/valuation-cap mechanics — outcomes pay a flat multiple on the check, matching the workbook. `totalOpt` is informational only (founder view), not an engine input.
+- `sweep2D(p, xKey, xVals, yKey, yVals)` in engine.js runs `run()` once per combination of two swept inputs and returns a grid of `{tvpiT, tvpiK, irrT, irrK}` — no new formulas, just many evaluations of the existing ones. Powers the "Where SAFE + Keel wins" heatmap (main.js's `renderWinMap`), which sweeps `redRate` × `recShare` at a fixed grid resolution (`WINMAP_STEPS`) on the same debounce as Monte Carlo, since a full grid costs tens of ms and shouldn't run on every keystroke.
 
 ## Ideas backlog
 
