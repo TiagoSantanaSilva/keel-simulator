@@ -37,20 +37,32 @@ button,input,select{font:inherit;color:inherit}
 .presets{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 8px}
 .presets button{border:1px solid var(--line);background:var(--sunk);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
 .presets button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
-.secthdr{margin:22px 0 4px;padding:10px 10px 8px;border-radius:8px;background:var(--sunk)}
-.secthdr span{display:block;font-weight:800;font-size:13px;letter-spacing:.02em;text-transform:uppercase}
-.secthdr small{display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px;text-transform:none;letter-spacing:0}
-.secthdr.sect-T{border-left:4px solid var(--trad)}
-.secthdr.sect-K{border-left:4px solid var(--keel)}
-.secthdr.sect-shared{border-left:4px solid var(--muted)}
-details.grp{border-top:1px solid var(--line);padding:10px 0 10px 10px}
-details.grp.sect-T{border-left:2px solid color-mix(in srgb, var(--trad) 40%, transparent)}
-details.grp.sect-K{border-left:2px solid color-mix(in srgb, var(--keel) 40%, transparent)}
-details.grp summary{cursor:pointer;font-weight:700;font-size:14px;list-style:none;display:flex;justify-content:space-between;align-items:center;padding:4px 0}
+
+/* Section headers ("Shared assumptions" / "SAFE only" / "SAFE + Keel") are the top level
+   of the rail's hierarchy: a solid tinted band, bold uppercase, colour-coded. Subsection
+   cards (details.grp) sit one level down: outlined cards with a thin colour-coded spine
+   that echoes their section's colour, so it's visually obvious which card belongs to
+   which section even after scrolling past the header. */
+.secthdr{margin:28px 0 12px;padding:10px 14px;border-radius:9px;background:var(--sunk);border-left:4px solid var(--muted)}
+.secthdr:first-child{margin-top:18px}
+.secthdr span{display:block;font-weight:800;font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink)}
+.secthdr small{display:block;font-weight:500;color:var(--muted);font-size:11.5px;margin-top:2px;text-transform:none;letter-spacing:0}
+.secthdr.sect-T{border-left-color:var(--trad)}
+.secthdr.sect-K{border-left-color:var(--keel);background:color-mix(in srgb, var(--keel) 10%, var(--sunk))}
+.secthdr.sect-shared{border-left-color:var(--muted)}
+
+details.grp{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:2px 14px 4px;margin:10px 0 0;background:var(--surface);box-shadow:0 1px 2px rgba(14,42,59,.04)}
+details.grp.sect-T{border-left-color:var(--trad)}
+details.grp.sect-K{border-left-color:var(--keel)}
+details.grp.sect-shared{border-left-color:color-mix(in srgb, var(--muted) 75%, var(--line))}
+details.grp[open]{background:var(--sunk)}
+details.grp summary{cursor:pointer;font-weight:700;font-size:14px;list-style:none;display:flex;justify-content:space-between;align-items:center;padding:10px 0;gap:8px}
 details.grp summary::-webkit-details-marker{display:none}
-details.grp summary::after{content:"+";color:var(--muted);font-weight:400;font-size:18px}
+details.grp summary::after{content:"+";color:var(--muted);font-weight:400;font-size:18px;flex-shrink:0}
 details.grp[open] summary::after{content:"\2212"}
-.field{margin:12px 0 4px}
+details.grp summary:hover{color:var(--keel)}
+details.grp[open] summary{border-bottom:1px solid var(--line)}
+.field{margin:14px 0 4px}
 .field label{display:flex;flex-wrap:nowrap;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px}
 .field label span{color:var(--ink);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .field label output{color:var(--ink);font-weight:600;white-space:nowrap;flex-shrink:0}
