@@ -265,6 +265,36 @@ function renderHist(mc){
     <dt>Chance LPs lose money</dt><dd>${(s.loss*100).toFixed(1)}%</dd><dt>Worst 10% of funds</dt><dd>${s.p10.toFixed(2)}x</dd>
     <dt>Median fund</dt><dd>${s.p50.toFixed(2)}x</dd><dt>Best 10% of funds</dt><dd>${s.p90.toFixed(2)}x</dd><dt>Average</dt><dd>${s.mean.toFixed(2)}x</dd>
     <dt>Median net IRR</dt><dd>${isNaN(s.irrMedian)?"n/a":(s.irrMedian*100).toFixed(1)+"%"}</dd></dl></div>`}).join("");
+  renderBox(mc, hi);
+}
+function renderBox(mc,hi){
+  const small=window.matchMedia("(max-width:560px)").matches;
+  const fs=small?32:11;
+  const m={l:small?110:72,r:14,t:small?24:14,b:small?46:30};
+  const rowH=small?130:80, gap=small?24:16, boxH=rowH*.34;
+  const W=760, H=m.t+m.b+rowH*2+gap;
+  const x=v=>m.l+v*(W-m.l-m.r)/hi;
+  const rowY=[m.t+rowH/2, m.t+rowH+gap+rowH/2];
+  let g="";
+  const tickStep=hi>4?1:.5;
+  for(let v=0;v<=hi+1e-9;v+=tickStep){
+    g+=`<line x1="${x(v)}" x2="${x(v)}" y1="${m.t-4}" y2="${H-m.b+4}" stroke="var(--line)"/>`;
+    g+=`<text x="${x(v)}" y="${H-m.b+22}" text-anchor="middle" style="font-size:${fs}px">${v}x</text>`;
+  }
+  g+=`<text x="${(m.l+W-m.r)/2}" y="${H-4}" text-anchor="middle" style="fill:var(--muted);font-size:${fs}px">Net TVPI (money multiple returned to LPs)</text>`;
+  if(hi>1) g+=`<line x1="${x(1)}" x2="${x(1)}" y1="${m.t-4}" y2="${H-m.b+4}" stroke="var(--water)" stroke-dasharray="5 4" stroke-width="1.5"/>`;
+  ["T","K"].forEach((k,i)=>{
+    const s=mc[k], cy=rowY[i], col=COL[k];
+    g+=`<text x="${m.l-12}" y="${cy+4}" text-anchor="end" style="fill:${col};font-weight:700;font-size:${fs}px">${NAME[k]}</text>`;
+    g+=`<line x1="${x(s.p10)}" x2="${x(s.q1)}" y1="${cy}" y2="${cy}" stroke="${col}" stroke-width="1.5"/>`;
+    g+=`<line x1="${x(s.q3)}" x2="${x(s.p90)}" y1="${cy}" y2="${cy}" stroke="${col}" stroke-width="1.5"/>`;
+    g+=`<line x1="${x(s.p10)}" x2="${x(s.p10)}" y1="${cy-boxH/3}" y2="${cy+boxH/3}" stroke="${col}" stroke-width="1.5"/>`;
+    g+=`<line x1="${x(s.p90)}" x2="${x(s.p90)}" y1="${cy-boxH/3}" y2="${cy+boxH/3}" stroke="${col}" stroke-width="1.5"/>`;
+    g+=`<rect x="${x(s.q1)}" y="${cy-boxH/2}" width="${Math.max(1,x(s.q3)-x(s.q1))}" height="${boxH}" fill="${col}" fill-opacity=".25" stroke="${col}" stroke-width="1.5"/>`;
+    g+=`<line x1="${x(s.p50)}" x2="${x(s.p50)}" y1="${cy-boxH/2}" y2="${cy+boxH/2}" stroke="${col}" stroke-width="2.5"/>`;
+    g+=`<text x="${x(s.p50)}" y="${cy-boxH/2-6}" text-anchor="middle" style="fill:${col};font-weight:700;font-size:${fs}px">${s.p50.toFixed(2)}x</text>`;
+  });
+  $("box").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Interquartile range of net TVPI across simulated funds, SAFE only vs SAFE + Keel">${g}</svg>`;
 }
 function renderFounder(){
   const p=S, keepConv=1-p.redRate, dil=v=>p.roundVal?v/p.roundVal:0;
