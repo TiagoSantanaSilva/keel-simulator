@@ -17,8 +17,7 @@ export const G = [
   ["MFY","Management fee period (years)",5,12,1,"n"],
   ["MF","Management fee (annual)",0,.05,.0025,"pct"],
   ["carry","Carried interest",0,.3,.05,"pct"]]},
- {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[
-  ["failYearStart","Failures start being written down (years after initial check)",0,6,1,"yr","Before this year, a failed position is still held at cost in the unrealised-value (NAV) chart, even though the model already knows it will fail. From here the markdown spreads gradually to zero over a few years, instead of dropping in one step. Only affects the RVPI/TVPI-over-time chart, never DPI or IRR."]]},
+ {id:"out",section:"shared",title:"Outcomes (same companies, both strategies)",open:true,f:[]},
  {id:"fo",section:"shared",title:"Follow-on reserve (same for both strategies)",f:[
   ["reserve","Follow-on reserve (% of investable capital)",0,.5,.01,"pct","More reserve means fewer initial checks. Raises variance either way — see Monte Carlo below."],
   ["foYear","Follow-ons deployed (years after initial check)",0,6,1,"yr","When follow-on money goes into surviving companies."],
