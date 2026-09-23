@@ -110,14 +110,19 @@ The workbook itself tracks only realised cash (DPI over time; TVPI is the final 
 everything has exited). This app additionally marks unrealised positions for the RVPI/TVPI
 chart, using the simplest defensible convention given the workbook has no interim marks:
 
-- A position destined to succeed is held at cost from year 1 until its exit year, then it's
-  realised (removed from NAV, added to distributions).
+- A position destined to succeed is held at cost from year 1, marked up to `foStepUp`× cost
+  from `foYear` (`markFactor`), then realised at its full outcome multiple at its exit year
+  (removed from NAV, added to distributions). The markup models the fact that a follow-on
+  round reprices *existing* investors, not just the new money going in — before this, a
+  surviving position sat flat at cost for years, understating RVPI/TVPI in exactly the years
+  the chart is supposed to be telling a marks-vs-cash story.
 - A position destined to fail is held at cost (`checkT` for SAFE only; `safeK` plus any
-  unredeemed `optK` for SAFE + Keel) until `failYear` (default 3), then written off — the model
-  already knows it will fail, but `failYear` reflects that this isn't obvious on paper until
-  some time has passed. A redeemed failure is a separate case: its `optK` is held at cost until
-  the redemption year (`dRed`, independent of `failYear`), since that capital is genuinely
-  recovered as cash then.
+  unredeemed `optK` for SAFE + Keel) through `failYearStart` (default 2), then marked down
+  *linearly* to zero by `failYear` (default 5) — a ramp (`failFrac`), not a single-year cliff,
+  matching how a real portfolio recognises losses gradually rather than all at once. A redeemed
+  failure is a separate case: its `optK` is held at cost until the redemption year (`dRed`,
+  independent of `failYearStart`/`failYear`), since that capital is genuinely recovered as
+  cash then.
 - The follow-on reserve and recycled capital are held at cost (the dollar amount allocated to
   each bucket, before the `foStepUp` multiple is applied) from their deployment year to their
   exit year.

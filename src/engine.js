@@ -36,6 +36,24 @@ function allocate(p,survShare,valueMix,pool){
 // step-up), so it only captures a fraction of the same exit multiple.
 const foMult=(p,o)=>o.mult/p.foStepUp;
 
+// NAV marks (RVPI/TVPI-over-time chart only -- never DPI or IRR, which come from the cash
+// rows below). A surviving position is held at cost until the follow-on round at `foYear`,
+// then marked up to the same step-up used for actual follow-on dollars: the round that
+// prices new money in at a premium also reprices the company's *existing* investors, so an
+// initial check is worth `foStepUp`x its cost from that point until it exits and realises
+// the full outcome multiple.
+const markFactor=(p,t)=>t>=p.foYear?p.foStepUp:1;
+// A failed position doesn't drop to zero the instant the model resolves its outcome -- real
+// funds take time to recognise a failure. Held at full cost through `failYearStart`, then
+// marked down linearly to zero by `failYear` (a ramp, not a cliff); fully written off from
+// `failYear` on.
+const failFrac=(p,t)=>{
+  if(t<p.failYearStart) return 1;
+  if(t>=p.failYear) return 0;
+  const span=Math.max(1,p.failYear-p.failYearStart);
+  return Math.max(0,Math.min(1,(p.failYear-t)/span));
+};
+
 export function irr(cf){
   const npv=r=>{let f=1,s=0;for(let i=0;i<cf.length;i++){s+=cf[i]/f;f*=(1+r)}return s};
   let best=NaN;
@@ -151,10 +169,10 @@ export function run(p){
 
     let n=0;
     p.outcomes.forEach((o,i)=>{
-      if(t<o.exit) n+=d.NT*p.checkT*o.share;
+      if(t<o.exit) n+=d.NT*p.checkT*o.share*markFactor(p,t);
       if(t>=p.foYear&&t<o.exit) n+=d.foAllocT[i];
     });
-    if(t<p.failYear) n+=d.failedT*p.checkT;
+    n+=d.failedT*p.checkT*failFrac(p,t);
     T.nav[t]=n;
 
     // ---- SAFE + Option ----
@@ -171,12 +189,12 @@ export function run(p){
 
     n=0;
     p.outcomes.forEach((o,i)=>{
-      if(t<o.exit) n+=d.NK*d.checkK*o.share;
+      if(t<o.exit) n+=d.NK*d.checkK*o.share*markFactor(p,t);
       if(t>=p.foYear&&t<o.exit) n+=d.foAllocK[i];
       if(t>=p.dRed&&t<o.exit) n+=d.recAllocK[i];
     });
     if(t<p.dRed) n+=d.redeemedK*p.optK;
-    if(t<p.failYear) n+=d.failedK*p.safeK+(d.failedK-d.redeemedK)*p.optK;
+    n+=(d.failedK*p.safeK+(d.failedK-d.redeemedK)*p.optK)*failFrac(p,t);
     K.nav[t]=n;
   }
 

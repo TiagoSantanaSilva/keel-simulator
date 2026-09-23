@@ -167,7 +167,12 @@ function renderHull(r){
     h+=`<div class="row"><div class="name">${NAME[k]}<small>${sub[k]}</small></div>
       <div class="track" role="img" aria-label="${NAME[k]} net TVPI ${v.toFixed(2)}x"><div class="bar" style="width:${pos(v)}%;background:${COL[k]}"></div><div class="waterline" style="left:${pos(1)}%"></div></div>
       <div class="val" style="color:${COL[k]}">${v.toFixed(2)}x</div></div>`});
-  const ticks=[0,.5,1,1.5,2,3,4,5,6,8,10].filter(v=>v<=max);
+  const allTicks=[0,.5,1,1.5,2,3,4,5,6,8,10].filter(v=>v<=max);
+  // Below ~500px the full tick set collides into an unreadable run of labels; keep just
+  // zero, the money-back line and the top of the scale.
+  const ticks=window.matchMedia("(max-width:500px)").matches
+    ? [0,1,Math.max(1,+max.toFixed(1))].filter((v,i,a)=>a.indexOf(v)===i)
+    : allTicks;
   h+=`<div class="scale"><div></div><div class="ticks">${ticks.map(v=>`<span style="left:${pos(v)}%">${v===1?'<span class="wl-label">1.0x</span>':v+"x"}</span>`).join("")}</div><div></div></div>`;
   $("hull").innerHTML=h;
   $("headline").textContent=`What a ${fmt.usd(r.p.F)} seed fund returns to its LPs`;
@@ -198,21 +203,27 @@ function tabs(host,items,cur,onPick){
     b.onclick=()=>{onPick(k)}; el.appendChild(b)});
 }
 function lineChart(host,series,yfmt,zeroLine){
-  const W=760,H=300,m={l:58,r:14,t:12,b:28};
+  // SVG text is sized in viewBox units, so on a narrow phone (where the 760-wide viewBox
+  // gets squeezed into ~300 real px) an "11px" label renders at under 5px on screen. Render
+  // a taller, more generously margined chart with bigger label text so it scales down to
+  // something still legible, instead of a fixed size tuned only for desktop widths.
+  const small=window.matchMedia("(max-width:560px)").matches;
+  const W=760,H=small?460:300,m=small?{l:76,r:10,t:20,b:46}:{l:58,r:14,t:12,b:28};
+  const fs=small?32:11;
   const all=series.flatMap(s=>s.v).filter(v=>!isNaN(v)); let lo=Math.min(0,...all), hi=Math.max(...all,zeroLine||0); if(hi===lo) hi=lo+1;
   const raw=(hi-lo)/5, mag=Math.pow(10,Math.floor(Math.log10(raw))), step=[1,2,2.5,5,10].map(f=>f*mag).find(s=>s>=raw);
   lo=Math.floor(lo/step)*step; hi=Math.ceil(hi/step)*step; const nt=Math.round((hi-lo)/step);
   const x=i=>m.l+i*(W-m.l-m.r)/(YR.length-1), y=v=>m.t+(hi-v)*(H-m.t-m.b)/(hi-lo);
   let g="";
-  for(let i=0;i<=nt;i++){const v=lo+i*step; g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${yfmt(v)}</text>`}
+  for(let i=0;i<=nt;i++){const v=lo+i*step; g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end" style="font-size:${fs}px">${yfmt(v)}</text>`}
   if(zeroLine!==undefined && zeroLine>lo && zeroLine<hi) g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(zeroLine)}" y2="${y(zeroLine)}" stroke="var(--water)" stroke-dasharray="5 4" stroke-width="1.5"/>`;
-  YR.forEach((t,i)=>g+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle">${t}</text>`);
+  YR.forEach((t,i)=>g+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle" style="font-size:${fs}px">${t}</text>`);
   const midY=m.t+(H-m.t-m.b)/2;
   series.forEach(s=>{
     // Break into contiguous runs of finite values so a leading NaN (e.g. IRR before any cash returns) leaves a gap, not a bogus line to/from 0.
     let run=[];
     const flush=()=>{if(run.length>1) g+=`<polyline fill="none" stroke="${s.c}" stroke-width="2.5" stroke-linejoin="round" points="${run.map(([px,py])=>px+","+py).join(" ")}"/>`; run=[]};
-    s.v.forEach((v,i)=>{if(isNaN(v)){flush(); g+=`<text x="${x(i)}" y="${midY+4}" text-anchor="middle" style="fill:var(--muted)">–</text>`}else{run.push([x(i),y(v)]); g+=`<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="${s.c}"/>`}});
+    s.v.forEach((v,i)=>{if(isNaN(v)){flush(); g+=`<text x="${x(i)}" y="${midY+4}" text-anchor="middle" style="fill:var(--muted);font-size:${fs}px">–</text>`}else{run.push([x(i),y(v)]); g+=`<circle cx="${x(i)}" cy="${y(v)}" r="${small?4:3}" fill="${s.c}"/>`}});
     flush();
   });
   g+=`<rect id="hov" x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent"/>`;
@@ -230,16 +241,17 @@ function renderChart(r){
   const money=chartKey==="cnet", pctv=chartKey==="irrToDate";
   const yfmt=(v,full)=>money?(full?fmt.usdFull(v):fmt.usd(v)):pctv?(v*100).toFixed(1)+"%":v.toFixed(2)+"x";
   lineChart("chart",["T","K"].map(k=>({n:NAME[k],c:COL[k],v:r[k][chartKey]})),yfmt,money||pctv?0:1);
+  const markNote=`Surviving positions are marked at cost until the follow-on round in Year ${S.foYear+1}, then marked up ${fmt.x(S.foStepUp)} until they exit. Failed positions stay at cost through Year ${S.failYearStart}, then write down gradually to zero by Year ${S.failYear} — a ramp, not a cliff. Only this chart is affected; DPI and IRR use realised cash only.`;
   const notes={
     irrToDate:"IRR to date is mathematically undefined in Year 1 (shown as –), before any capital has moved.",
-    tvpi:`Failed positions are held at cost here through Year ${S.failYear}, then written off from Year ${S.failYear+1} — real funds don't mark a company to zero the instant it's destined to fail. Only this chart is affected; DPI and IRR use realised cash only.`,
-    rvpi:`Failed positions are held at cost here through Year ${S.failYear}, then written off from Year ${S.failYear+1} — real funds don't mark a company to zero the instant it's destined to fail. Only this chart is affected; DPI and IRR use realised cash only.`,
-    moic:`Failed positions are held at cost here through Year ${S.failYear}, then written off from Year ${S.failYear+1} — real funds don't mark a company to zero the instant it's destined to fail. Only this chart is affected; DPI and IRR use realised cash only.`,
+    tvpi:markNote, rvpi:markNote, moic:markNote,
   };
   $("chartnote").textContent=notes[chartKey]||"";
 }
 function renderHist(mc){
-  const W=760,H=256,m={l:48,r:14,t:10,b:46};
+  const small=window.matchMedia("(max-width:560px)").matches;
+  const W=760,H=small?400:256,m=small?{l:70,r:10,t:18,b:72}:{l:48,r:14,t:10,b:46};
+  const fs=small?32:11;
   const all=[...mc.T.arr,...mc.K.arr], lo=0, hi=Math.max(2,Math.min(8,[...all].sort((a,b)=>a-b)[Math.floor(all.length*.99)]*1.05));
   const bins=40, bw=(hi-lo)/bins;
   const hist=a=>{const h=new Array(bins).fill(0);a.forEach(v=>{const i=Math.min(bins-1,Math.max(0,Math.floor((v-lo)/bw)));h[i]++});return h.map(c=>c/a.length)};
@@ -248,10 +260,10 @@ function renderHist(mc){
   const ymax=Math.ceil(ymaxRaw/ystep)*ystep;
   const x=v=>m.l+(v-lo)*(W-m.l-m.r)/(hi-lo), y=v=>m.t+(ymax-v)*(H-m.t-m.b)/ymax;
   let g="";
-  for(let v=0;v<=ymax+1e-9;v+=ystep) g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${(v*100).toFixed(0)}%</text>`;
-  for(let v=0;v<=hi+1e-9;v+=hi>4?1:.5) g+=`<text x="${x(v)}" y="${H-26}" text-anchor="middle">${v}x</text>`;
-  g+=`<text x="${(m.l+W-m.r)/2}" y="${H-6}" text-anchor="middle" style="fill:var(--muted)">Net TVPI (money multiple returned to LPs)</text>`;
-  g+=`<line x1="${x(1)}" x2="${x(1)}" y1="${m.t}" y2="${y(0)}" stroke="var(--water)" stroke-dasharray="5 4" stroke-width="1.5"/><text x="${x(1)+6}" y="${m.t+12}" style="fill:var(--water)">money back</text>`;
+  for(let v=0;v<=ymax+1e-9;v+=ystep) g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end" style="font-size:${fs}px">${(v*100).toFixed(0)}%</text>`;
+  for(let v=0;v<=hi+1e-9;v+=hi>4?1:.5) g+=`<text x="${x(v)}" y="${H-26}" text-anchor="middle" style="font-size:${fs}px">${v}x</text>`;
+  g+=`<text x="${(m.l+W-m.r)/2}" y="${H-6}" text-anchor="middle" style="fill:var(--muted);font-size:${fs}px">Net TVPI (money multiple returned to LPs)</text>`;
+  g+=`<line x1="${x(1)}" x2="${x(1)}" y1="${m.t}" y2="${y(0)}" stroke="var(--water)" stroke-dasharray="5 4" stroke-width="1.5"/><text x="${x(1)+6}" y="${m.t+12}" style="fill:var(--water);font-size:${fs}px">money back</text>`;
   ["T","K"].forEach(k=>{let d=`M${x(lo)},${y(0)}`;H2[k].forEach((c,i)=>{d+=` L${x(lo+i*bw)},${y(c)} L${x(lo+(i+1)*bw)},${y(c)}`});d+=` L${x(hi)},${y(0)}`;
     g+=`<path d="${d}" fill="${COL[k]}" fill-opacity="${k==='K'?.22:.1}" stroke="${COL[k]}" stroke-width="2"/>`});
   $("hist").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Distribution of net TVPI across simulated funds, share of funds on the vertical axis">${g}</svg>`;
@@ -298,6 +310,7 @@ function warnings(){
   const minExit=S.outcomes.length?Math.min(...S.outcomes.map(o=>o.exit)):Infinity;
   if(S.outcomes.length&&S.foYear>=minExit) w.push("Follow-ons must be deployed before the earliest outcome's exit year.");
   if(S.outcomes.length&&S.dRed>=minExit) w.push("Redemptions must happen before the earliest outcome's exit year, so recycled capital has time to be deployed.");
+  if(S.failYearStart>S.failYear) w.push("Failures must start being written down before they're fully written off.");
   $("warn").textContent=w.join(" ");
   return w.length===0;
 }

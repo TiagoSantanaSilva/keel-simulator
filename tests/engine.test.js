@@ -34,6 +34,14 @@ import { run, monte, irr, YR } from "../src/engine.js";
 //    divides the effective follow-on multiple back down, so these numbers are substantially
 //    lower than the ones item 3 introduced, though still higher than pre-item-3 since a slice
 //    of every follow-on dollar still rides the outlier multiple, just at 1/3 the payoff.
+// 6. NAV marks (RVPI/TVPI-over-time chart only) changed twice more, neither of which moves
+//    any number below -- both only touch nav[], never paid[]/dist[], so DPI/IRR/TVPI-final
+//    are untouched. First, a surviving position is marked up to `foStepUp` from `foYear`
+//    instead of sitting flat at cost until exit (real follow-on rounds reprice existing
+//    investors too, not just new money). Second, `failYear` became a window
+//    (`failYearStart` to `failYear`, default 2 to 5): failed positions write down linearly
+//    across it instead of cliff-dropping to zero in one year, since real portfolios bleed
+//    out losses over time rather than recognising them all at once.
 // If a change moves these numbers on purpose, update them here and say why in the commit.
 describe("deterministic engine, default inputs", () => {
   const r = run(DEF);
@@ -157,6 +165,39 @@ describe("model invariants", () => {
     const high = run({ ...DEF, foStepUp: 6 });
     expect(high.T.TVPI).toBeLessThan(low.T.TVPI);
     expect(high.K.TVPI).toBeLessThan(low.K.TVPI);
+  });
+});
+
+describe("NAV marks", () => {
+  it("marks a surviving position up to the follow-on step-up from foYear, instead of holding flat at cost", () => {
+    const p = { ...DEF, sh0: 0, reserve: 0, outcomes: [{ label: "Only", share: 1, mult: 5, exit: 6 }], foYear: 2, foStepUp: 3 };
+    const r = run(p);
+    const cost = r.d.NT * p.checkT;
+    expect(r.T.nav[1]).toBeCloseTo(cost, 0); // year 2 (t=1), still before foYear: at cost
+    expect(r.T.nav[2]).toBeCloseTo(cost * 3, 0); // year 3 (t=2=foYear): marked up
+  });
+
+  it("smooths the failure write-off into a ramp between failYearStart and failYear, not a cliff", () => {
+    const p = { ...DEF, sh0: 1, outcomes: [], failYearStart: 2, failYear: 5 };
+    const r = run(p);
+    const cost = r.d.failedT * p.checkT;
+    expect(r.T.nav[0]).toBeCloseTo(cost, 0); // held at full cost before failYearStart
+    expect(r.T.nav[1]).toBeCloseTo(cost, 0);
+    expect(r.T.nav[2]).toBeGreaterThan(r.T.nav[3]); // strictly decreasing through the ramp
+    expect(r.T.nav[3]).toBeGreaterThan(r.T.nav[4]);
+    expect(r.T.nav[4]).toBeGreaterThan(0);
+    expect(r.T.nav[5]).toBeCloseTo(0, 0); // fully written off from failYear on
+  });
+
+  it("the write-off ramp's timing never changes realised cash flows: DPI and net IRR are identical regardless of failYearStart/failYear", () => {
+    // failYearStart/failYear only appear in the NAV lines (failFrac); paid[]/dist[] -- and
+    // so DPI/IRR -- must be bit-for-bit independent of them.
+    const a = run({ ...DEF, failYearStart: 2, failYear: 5 });
+    const b = run({ ...DEF, failYearStart: 0, failYear: 1 });
+    expect(a.T.dpi).toEqual(b.T.dpi);
+    expect(a.T.irr).toBeCloseTo(b.T.irr, 9);
+    expect(a.K.dpi).toEqual(b.K.dpi);
+    expect(a.K.irr).toBeCloseTo(b.K.irr, 9);
   });
 });
 
