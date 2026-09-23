@@ -348,11 +348,10 @@ function renderWinMap(){
   g+=`<circle cx="${mx}" cy="${my}" r="${small?3:2.5}" fill="var(--ink)"/>`;
 
   $("winmap").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Whether SAFE + Keel or SAFE only wins, by redemption rate and recycled share">${g}</svg>`;
-  $("winmapnote").innerHTML=`At your current settings — <b>${fmt.pct1(p.redRate)}</b> redemption rate,
-    <b>${fmt.pct1(p.recShare)}</b> recycled — <b style="color:${curDelta>=0?"var(--pos)":"var(--neg)"}">
-    SAFE + Keel ${curDelta>=0?"beats":"trails"} SAFE only by ${magFmt(Math.abs(curDelta))}
-    ${winMapKey==="tvpi"?"net TVPI":"net IRR"}</b>. The dot marks that point on the map; darker
-    cells mean a bigger gap either way.`;
+  $("winmapnote").innerHTML=`At your current settings (<b>${fmt.pct1(p.redRate)}</b> redemption rate,
+    <b>${fmt.pct1(p.recShare)}</b> recycled) <b style="color:${curDelta>=0?"var(--pos)":"var(--neg)"}">
+    SAFE + Keel ${curDelta>=0?"beats":"trails"} SAFE by ${magFmt(Math.abs(curDelta))}
+    ${winMapKey==="tvpi"?"net TVPI":"net IRR"}</b>.`;
 }
 function renderFounder(){
   const p=S, keepConv=1-p.redRate, dil=v=>p.roundVal?v/p.roundVal:0;
